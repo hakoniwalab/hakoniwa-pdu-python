@@ -32,7 +32,9 @@ class PduConvertor:
         return binary_data
     
     def convert_binary_to_json(self, robot_name: str, pdu_name: str, binary_data: bytearray) -> dict:
+        print(f"[DEBUG] Converting binary data for {robot_name}/{pdu_name} of size {len(binary_data)}")
         pdu_type = self.pdu_channel_config.get_pdu_type(robot_name, pdu_name)
+        print(f"[DEBUG] PDU type for {robot_name}/{pdu_name}: {pdu_type}")
         if pdu_type is None:
             raise ValueError(f"PDU type for {robot_name}/{pdu_name} is not defined.")
         

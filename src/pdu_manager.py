@@ -1,15 +1,17 @@
 from typing import Optional
+import os
 from impl.communication_buffer import CommunicationBuffer
 from impl.icommunication_service import ICommunicationService
 from impl.data_packet import DataPacket
 from impl.pdu_channel_config import PduChannelConfig  # ← 追加
+from impl.pdu_convertor import PduConvertor
 
 class PduManager:
     def __init__(self):
         self.comm_buffer: Optional[CommunicationBuffer] = None
         self.comm_service: Optional[ICommunicationService] = None
         self.b_is_initialized = False
-        self.b_last_known_service_state = False
+
 
     def initialize(self, config_path: str, comm_service: ICommunicationService):
         if comm_service is None:
@@ -22,6 +24,8 @@ class PduManager:
         self.comm_buffer = CommunicationBuffer(pdu_config)
         self.comm_service = comm_service
         self.b_is_initialized = True
+        hako_binary_path = os.getenv('HAKO_BINARY_PATH', '/usr/local/lib/hakoniwa/hako_binary/offset')
+        self.pdu_convertor = PduConvertor(hako_binary_path, pdu_config)
         print("[INFO] PduManager initialized")
 
     def is_service_enabled(self) -> bool:
