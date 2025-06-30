@@ -5,6 +5,7 @@ from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
 from hakoniwa_pdu.impl.data_packet import DataPacket
 from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig  # ← 追加
 from hakoniwa_pdu.impl.pdu_convertor import PduConvertor
+import importlib.resources
 
 class PduManager:
     def __init__(self):
@@ -12,6 +13,9 @@ class PduManager:
         self.comm_service: Optional[ICommunicationService] = None
         self.b_is_initialized = False
 
+    def get_default_offset_path(self) -> str:
+        # インストール済パッケージ内の offset ディレクトリパスを取得
+        return str(importlib.resources.files("hakoniwa_pdu.resources.offset"))
 
     def initialize(self, config_path: str, comm_service: ICommunicationService):
         if comm_service is None:
@@ -24,7 +28,7 @@ class PduManager:
         self.comm_buffer = CommunicationBuffer(pdu_config)
         self.comm_service = comm_service
         self.b_is_initialized = True
-        hako_binary_path = os.getenv('HAKO_BINARY_PATH', '/usr/local/lib/hakoniwa/hako_binary/offset')
+        hako_binary_path = os.getenv('HAKO_BINARY_PATH', self.get_default_offset_path())
         self.pdu_convertor = PduConvertor(hako_binary_path, pdu_config)
         print("[INFO] PduManager initialized")
 
