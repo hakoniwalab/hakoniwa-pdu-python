@@ -1,10 +1,10 @@
 from typing import Optional
 import os
-from impl.communication_buffer import CommunicationBuffer
-from impl.icommunication_service import ICommunicationService
-from impl.data_packet import DataPacket
-from impl.pdu_channel_config import PduChannelConfig  # ← 追加
-from impl.pdu_convertor import PduConvertor
+from hakoniwa_pdu.impl.communication_buffer import CommunicationBuffer
+from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
+from hakoniwa_pdu.impl.data_packet import DataPacket
+from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig  # ← 追加
+from hakoniwa_pdu.impl.pdu_convertor import PduConvertor
 
 class PduManager:
     def __init__(self):

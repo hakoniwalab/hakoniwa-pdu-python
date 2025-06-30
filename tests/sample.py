@@ -2,8 +2,8 @@ import argparse
 import asyncio
 import sys
 import os
-from pdu_manager import PduManager
-from impl.websocket_communication_service import WebSocketCommunicationService
+from hakoniwa_pdu.pdu_manager import PduManager
+from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
 
 async def main():
     parser = argparse.ArgumentParser(description="Sample PDU Manager usage")
