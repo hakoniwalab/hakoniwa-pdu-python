@@ -2,9 +2,9 @@ import asyncio
 import threading
 import websockets
 
-from data_packet import DataPacket
-from communication_buffer import CommunicationBuffer
-from icommunication_service import ICommunicationService
+from .data_packet import DataPacket
+from .communication_buffer import CommunicationBuffer
+from .icommunication_service import ICommunicationService
 
 
 class WebSocketCommunicationService(ICommunicationService):

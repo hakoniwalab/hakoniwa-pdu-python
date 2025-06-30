@@ -1,7 +1,7 @@
 import threading
 from typing import Tuple, Optional
-from pdu_channel_config import PduChannelConfig
-from data_packet import DataPacket
+from .pdu_channel_config import PduChannelConfig
+from .data_packet import DataPacket
 
 class CommunicationBuffer:
     def __init__(self, pdu_channel_config: PduChannelConfig):

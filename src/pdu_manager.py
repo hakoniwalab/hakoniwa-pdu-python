@@ -26,6 +26,7 @@ class PduManager:
 
     def is_service_enabled(self) -> bool:
         if not self.b_is_initialized or self.comm_service is None:
+            print("[ERROR] PduManager is not initialized or CommService is None")
             return False
         current_state = self.comm_service.is_service_enabled()
         self.b_last_known_service_state = current_state
@@ -33,11 +34,17 @@ class PduManager:
 
     def start_service(self, uri: str = "") -> bool:
         if not self.b_is_initialized or self.comm_service is None:
+            print("[ERROR] PduManager is not initialized or CommService is None")
             return False
         if self.comm_service.is_service_enabled():
+            print("[INFO] Service is already running")
             return False
         result = self.comm_service.start_service(self.comm_buffer, uri)
         self.b_last_known_service_state = result
+        if result:
+            print(f"[INFO] Service started successfully at {uri}")
+        else:
+            print("[ERROR] Failed to start service")
         return result
 
     def stop_service(self) -> bool:
@@ -78,10 +85,12 @@ class PduManager:
 
     def _declare_pdu(self, robot_name: str, pdu_name: str, is_read: bool) -> bool:
         if not self.is_service_enabled():
+            print("[WARN] Service is not enabled")
             return False
 
         channel_id = self.comm_buffer.get_pdu_channel_id(robot_name, pdu_name)
         if channel_id < 0:
+            print(f"[WARN] Unknown PDU: {robot_name}/{pdu_name}")
             return False
 
         magic_number = 0x52455044 if is_read else 0x57505044
