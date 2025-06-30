@@ -22,6 +22,13 @@ class PduChannelConfig:
                     if ch.get("org_name") == pdu_name:
                         return ch.get("pdu_size", -1)
         return -1
+    def get_pdu_type(self, robot_name: str, pdu_name: str) -> Optional[str]:
+        for robot in self.config_dict.get("robots", []):
+            if robot.get("name") == robot_name:
+                for ch in robot.get("shm_pdu_readers", []) + robot.get("shm_pdu_writers", []):
+                    if ch.get("org_name") == pdu_name:
+                        return ch.get("type")
+        return None
 
     def get_pdu_channel_id(self, robot_name: str, pdu_name: str) -> int:
         for robot in self.config_dict.get("robots", []):

@@ -1,8 +1,10 @@
 import argparse
 import asyncio
 import sys
+import os
 from pdu_manager import PduManager
 from impl.websocket_communication_service import WebSocketCommunicationService
+from impl.pdu_convertor import PduConvertor
 
 async def main():
     parser = argparse.ArgumentParser(description="Sample PDU Manager usage")
@@ -10,6 +12,9 @@ async def main():
     parser.add_argument("--uri", required=True, help="WebSocket server URI")
     parser.add_argument("--read-time", type=int, default=5, help="Seconds to wait for PDU read")
     args = parser.parse_args()
+
+    hako_binary_path = os.getenv('HAKO_BINARY_PATH', '/usr/local/lib/hakoniwa/hako_binary/offset')
+    pduConvertor = PduConvertor(hako_binary_path, args.config)
 
     # 通信サービス（WebSocket）を生成
     service = WebSocketCommunicationService()
@@ -42,6 +47,14 @@ async def main():
         print(f"[RECV] Received PDU Data: {list(pdu_data)}")
     else:
         print("[INFO] No data received.")
+
+    # debug twist data of pdu_data
+    if pdu_data:
+        try:
+            json_data = pduConvertor.convert_binary_to_json(robot_name, pdu_name, pdu_data)
+            print(f"[DEBUG] PDU JSON Data: {json_data}")
+        except Exception as e:
+            print(f"[ERROR] Failed to convert binary to JSON: {e}")
 
     # 通信停止
     await manager.stop_service()
