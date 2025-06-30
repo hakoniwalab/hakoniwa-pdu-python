@@ -32,14 +32,14 @@ class PduManager:
         self.b_last_known_service_state = current_state
         return current_state
 
-    def start_service(self, uri: str = "") -> bool:
+    async def start_service(self, uri: str = "") -> bool:
         if not self.b_is_initialized or self.comm_service is None:
             print("[ERROR] PduManager is not initialized or CommService is None")
             return False
         if self.comm_service.is_service_enabled():
             print("[INFO] Service is already running")
             return False
-        result = self.comm_service.start_service(self.comm_buffer, uri)
+        result = await self.comm_service.start_service(self.comm_buffer, uri)
         self.b_last_known_service_state = result
         if result:
             print(f"[INFO] Service started successfully at {uri}")
@@ -47,10 +47,10 @@ class PduManager:
             print("[ERROR] Failed to start service")
         return result
 
-    def stop_service(self) -> bool:
+    async def stop_service(self) -> bool:
         if not self.b_is_initialized or self.comm_service is None:
             return False
-        result = self.comm_service.stop_service()
+        result = await self.comm_service.stop_service()
         self.b_last_known_service_state = not result
         return result
 
@@ -60,30 +60,30 @@ class PduManager:
     def get_pdu_size(self, robot_name: str, pdu_name: str) -> int:
         return self.comm_buffer.get_pdu_size(robot_name, pdu_name)
 
-    def flush_pdu_raw_data(self, robot_name: str, pdu_name: str, pdu_raw_data: bytearray) -> bool:
+    async def flush_pdu_raw_data(self, robot_name: str, pdu_name: str, pdu_raw_data: bytearray) -> bool:
         if not self.is_service_enabled() or self.comm_service is None:
             return False
         channel_id = self.comm_buffer.get_pdu_channel_id(robot_name, pdu_name)
         if channel_id < 0:
             return False
-        return self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
+        return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
 
     def read_pdu_raw_data(self, robot_name: str, pdu_name: str) -> Optional[bytearray]:
         if not self.is_service_enabled():
             return None
         return self.comm_buffer.get_buffer(robot_name, pdu_name)
 
-    def declare_pdu_for_read(self, robot_name: str, pdu_name: str) -> bool:
-        return self._declare_pdu(robot_name, pdu_name, is_read=True)
+    async def declare_pdu_for_read(self, robot_name: str, pdu_name: str) -> bool:
+        return await self._declare_pdu(robot_name, pdu_name, is_read=True)
 
-    def declare_pdu_for_write(self, robot_name: str, pdu_name: str) -> bool:
-        return self._declare_pdu(robot_name, pdu_name, is_read=False)
+    async def declare_pdu_for_write(self, robot_name: str, pdu_name: str) -> bool:
+        return await self._declare_pdu(robot_name, pdu_name, is_read=False)
 
-    def declare_pdu_for_readwrite(self, robot_name: str, pdu_name: str) -> bool:
+    async def declare_pdu_for_readwrite(self, robot_name: str, pdu_name: str) -> bool:
         return (self.declare_pdu_for_read(robot_name, pdu_name) and
                 self.declare_pdu_for_write(robot_name, pdu_name))
 
-    def _declare_pdu(self, robot_name: str, pdu_name: str, is_read: bool) -> bool:
+    async def _declare_pdu(self, robot_name: str, pdu_name: str, is_read: bool) -> bool:
         if not self.is_service_enabled():
             print("[WARN] Service is not enabled")
             return False
@@ -95,7 +95,7 @@ class PduManager:
 
         magic_number = 0x52455044 if is_read else 0x57505044
         pdu_raw_data = bytearray(magic_number.to_bytes(4, byteorder='little'))
-        return self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
+        return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
 
     def log_current_state(self):
         print("PduManager State:")

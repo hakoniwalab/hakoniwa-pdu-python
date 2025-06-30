@@ -2,11 +2,11 @@ from abc import ABC, abstractmethod
 
 class ICommunicationService(ABC):
     @abstractmethod
-    def start_service(self, comm_buffer, uri: str = "") -> bool:
+    async def start_service(self, comm_buffer, uri: str = "") -> bool:
         pass
 
     @abstractmethod
-    def stop_service(self) -> bool:
+    async def stop_service(self) -> bool:
         pass
 
     @abstractmethod
@@ -14,7 +14,7 @@ class ICommunicationService(ABC):
         pass
 
     @abstractmethod
-    def send_data(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
+    async def send_data(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
         pass
 
     @abstractmethod
