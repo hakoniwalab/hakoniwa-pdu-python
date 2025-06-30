@@ -28,7 +28,7 @@ class PduManager:
         self.comm_buffer = CommunicationBuffer(pdu_config)
         self.comm_service = comm_service
         self.b_is_initialized = True
-        hako_binary_path = os.getenv('HAKO_BINARY_PATH', self.get_default_offset_path())
+        hako_binary_path = os.getenv('HAKO_BINARY_PATH', '/usr/local/lib/hakoniwa/hako_binary/offset')
         self.pdu_convertor = PduConvertor(hako_binary_path, pdu_config)
         print("[INFO] PduManager initialized")
 
