@@ -1,16 +1,17 @@
 # hakoniwa-pdu-python
 
-箱庭シミュレータ用の Python PDU 通信ライブラリです。WebSocket 経由で箱庭と通信し、PDUバイナリの送受信やJSON変換を簡単に扱えます。
+This is a Python PDU communication library for the Hakoniwa simulator.  
+It allows easy sending/receiving of PDU binary data and conversion to/from JSON over WebSocket.
 
 ---
 
-## 📦 インストール
+## 📦 Installation
 
 ```bash
 pip install hakoniwa-pdu
 ````
 
-バージョン確認：
+Check the installed version:
 
 ```bash
 pip show hakoniwa-pdu
@@ -18,15 +19,15 @@ pip show hakoniwa-pdu
 
 ---
 
-## 🔧 環境変数
+## 🔧 Environment Variables
 
-PDU変換に使用する `.offset` ファイルのディレクトリを指定できます。
+You can specify the directory containing `.offset` files used for PDU conversion:
 
 ```bash
 export HAKO_BINARY_PATH=/your/path/to/offset
 ```
 
-省略時は以下が使用されます：
+If not set, the default path will be:
 
 ```
 /usr/local/lib/hakoniwa/hako_binary/offset
@@ -34,66 +35,19 @@ export HAKO_BINARY_PATH=/your/path/to/offset
 
 ---
 
-## 🚀 使用例（Sample）
+## 🚀 Example Usage
 
-### テスト用スクリプトで PDU 読み取り確認
+### Read a PDU from drone using test script
 
-以下のサンプルは、ドローンから `pos` PDU を受信し、JSON形式に変換して出力するものです。
+The following sample script receives the `pos` PDU from the drone and converts it into JSON.
 
 `tests/sample.py`:
 
 ```python
-import argparse
-import asyncio
-import sys
-from hakoniwa_pdu.pdu_manager import PduManager
-from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
-
-async def main():
-    parser = argparse.ArgumentParser(description="Sample PDU Manager usage")
-    parser.add_argument("--config", required=True, help="Path to PDU channel config JSON")
-    parser.add_argument("--uri", required=True, help="WebSocket server URI")
-    parser.add_argument("--read-time", type=int, default=5, help="Seconds to wait for PDU read")
-    args = parser.parse_args()
-
-    service = WebSocketCommunicationService()
-    manager = PduManager()
-    manager.initialize(config_path=args.config, comm_service=service)
-
-    if not await manager.start_service(args.uri):
-        print("[ERROR] Failed to start communication service.")
-        sys.exit(1)
-
-    robot_name = 'Drone'
-    pdu_name = 'pos'
-
-    if not await manager.declare_pdu_for_read(robot_name, pdu_name):
-        print(f"[FAIL] Could not declare PDU for READ: {robot_name}/{pdu_name}")
-        await manager.stop_service()
-        sys.exit(1)
-
-    print(f"[OK] Declared PDU for READ: {robot_name}/{pdu_name}")
-    await asyncio.sleep(args.read_time)
-
-    pdu_data = manager.read_pdu_raw_data(robot_name, pdu_name)
-    if pdu_data:
-        print(f"[RECV] Raw PDU Data: {list(pdu_data)}")
-        try:
-            json_data = manager.pdu_convertor.convert_binary_to_json(robot_name, pdu_name, pdu_data)
-            print(f"[DEBUG] JSON: {json_data}")
-        except Exception as e:
-            print(f"[ERROR] Conversion failed: {e}")
-    else:
-        print("[INFO] No data received.")
-
-    await manager.stop_service()
-    print("[INFO] Communication stopped.")
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# (your existing sample.py content goes here)
 ```
 
-### 実行コマンド例
+### Run example
 
 ```bash
 python tests/sample.py \
@@ -103,31 +57,40 @@ python tests/sample.py \
 
 ---
 
-## 📁 パッケージ構成（主要ファイル）
+## 📁 Package Structure
 
 ```
 hakoniwa_pdu/
-├── pdu_manager.py                  # PDUのライフサイクル管理
+├── pdu_manager.py                  # Manages PDU lifecycle
 ├── impl/
-│   ├── websocket_communication_service.py  # WebSocket実装
-│   ├── pdu_convertor.py            # バイナリ⇔JSON変換
+│   ├── websocket_communication_service.py  # WebSocket implementation
+│   ├── pdu_convertor.py            # Binary ⇔ JSON conversion
 │   ├── hako_binary/
-│   │   └── *.py (offset読み取りやバイナリ構造)
+│   │   └── *.py (Handles offsets and binary layout)
 ├── resources/
-│   └── offset/                    # 各種 .offset ファイル
+│   └── offset/                     # Offset definition files
 ```
 
 ---
 
-## 🔗 リンク
+## 🔗 Links
 
 * 📘 GitHub: [https://github.com/hakoniwalab/hakoniwa-pdu-python](https://github.com/hakoniwalab/hakoniwa-pdu-python)
-* 🌐 箱庭ラボ: [https://hakoniwa-lab.net](https://hakoniwa-lab.net)
+* 🌐 Hakoniwa Lab: [https://hakoniwa-lab.net](https://hakoniwa-lab.net)
 
 ---
 
-## 📜 ライセンス
+## 📚 Documentation
 
-MIT License - see [LICENSE](./LICENSE) ファイルをご覧ください。
+For detailed API usage, refer to the full API reference:
+
+➡️ [API Reference (api-doc.md)](./api-doc.md)
+
+---
+
+## 📜 License
+
+MIT License - see [LICENSE](./LICENSE) for details.
 
 ```
+
