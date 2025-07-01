@@ -3,7 +3,7 @@
 ## install
 
 ```bash
-pip install -i https://test.pypi.org/simple hakoniwa-pdu
+pip install hakoniwa-pdu
 ```
 
 show the installed version

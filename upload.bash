@@ -1,3 +1,3 @@
 #!/bin/bash
 
-twine upload --repository testpypi dist/*
+twine upload --verbose --repository  pypi dist/*
