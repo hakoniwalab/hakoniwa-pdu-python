@@ -3,7 +3,7 @@ import os
 from hakoniwa_pdu.impl.communication_buffer import CommunicationBuffer
 from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
 from hakoniwa_pdu.impl.data_packet import DataPacket
-from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig  # ← 追加
+from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig
 from hakoniwa_pdu.impl.pdu_convertor import PduConvertor
 import importlib.resources
 
