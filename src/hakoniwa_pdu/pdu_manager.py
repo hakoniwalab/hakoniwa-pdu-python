@@ -248,8 +248,9 @@ class PduManager:
         Returns:
             bool: True if both read and write declarations were successful.
         """        
-        return (self.declare_pdu_for_read(robot_name, pdu_name) and
-                self.declare_pdu_for_write(robot_name, pdu_name))
+        read_result = await self.declare_pdu_for_read(robot_name, pdu_name)
+        write_result = await self.declare_pdu_for_write(robot_name, pdu_name)
+        return read_result and write_result
 
     async def _declare_pdu(self, robot_name: str, pdu_name: str, is_read: bool) -> bool:
         """
