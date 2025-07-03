@@ -9,7 +9,7 @@ It allows easy sending/receiving of PDU binary data and conversion to/from JSON 
 
 ```bash
 pip install hakoniwa-pdu
-````
+```
 
 Check the installed version:
 
@@ -91,6 +91,4 @@ For detailed API usage, refer to the full API reference:
 ## 📜 License
 
 MIT License - see [LICENSE](./LICENSE) for details.
-
-```
 
