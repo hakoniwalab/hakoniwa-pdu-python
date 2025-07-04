@@ -50,6 +50,7 @@ class PduManager:
         self.comm_buffer: Optional[CommunicationBuffer] = None
         self.comm_service: Optional[ICommunicationService] = None
         self.b_is_initialized = False
+        self.b_last_known_service_state = False
 
     def get_default_offset_path(self) -> str:
         # インストール済パッケージ内の offset ディレクトリパスを取得
