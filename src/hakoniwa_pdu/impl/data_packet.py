@@ -1,5 +1,11 @@
 import struct
 
+# Magic numbers used for special control packets
+DECLARE_PDU_FOR_READ = 0x52455044   # "REPD"
+DECLARE_PDU_FOR_WRITE = 0x57505044  # "WPPD"
+# Request the server to immediately send the latest PDU for the given channel
+REQUEST_PDU_READ = 0x57505045
+
 class DataPacket:
     def __init__(self, robot_name: str = "", channel_id: int = 0, body_data: bytearray = None):
         self.robot_name = robot_name
