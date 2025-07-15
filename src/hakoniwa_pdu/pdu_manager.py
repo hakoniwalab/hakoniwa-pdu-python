@@ -1,8 +1,14 @@
 from typing import Optional
 import os
+import asyncio
 from hakoniwa_pdu.impl.communication_buffer import CommunicationBuffer
 from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
-from hakoniwa_pdu.impl.data_packet import DataPacket
+from hakoniwa_pdu.impl.data_packet import (
+    DataPacket,
+    DECLARE_PDU_FOR_READ,
+    DECLARE_PDU_FOR_WRITE,
+    REQUEST_PDU_READ,
+)
 from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig
 from hakoniwa_pdu.impl.pdu_convertor import PduConvertor
 import importlib.resources
@@ -212,6 +218,38 @@ class PduManager:
             return None
         return self.comm_buffer.get_buffer(robot_name, pdu_name)
 
+    async def request_pdu_read(self, robot_name: str, pdu_name: str, timeout: float = 1.0) -> Optional[bytearray]:
+        """Request the latest PDU data from the server and wait for the response.
+
+        Args:
+            robot_name (str): Target robot name.
+            pdu_name (str): PDU name to request.
+            timeout (float, optional): Seconds to wait for the response. Defaults to 1.0.
+
+        Returns:
+            Optional[bytearray]: Received PDU data or ``None`` if no data was received within the timeout.
+        """
+        if not self.is_service_enabled() or self.comm_service is None:
+            return None
+
+        channel_id = self.comm_buffer.get_pdu_channel_id(robot_name, pdu_name)
+        if channel_id < 0:
+            return None
+
+        # send request magic number
+        req_data = bytearray(REQUEST_PDU_READ.to_bytes(4, byteorder="little"))
+        if not await self.comm_service.send_data(robot_name, channel_id, req_data):
+            return None
+
+        # wait for buffer to be filled
+        loop = asyncio.get_event_loop()
+        end_time = loop.time() + timeout
+        while loop.time() < end_time:
+            if self.comm_buffer.contains_buffer(robot_name, pdu_name):
+                return self.comm_buffer.get_buffer(robot_name, pdu_name)
+            await asyncio.sleep(0.05)
+        return None
+
     async def declare_pdu_for_read(self, robot_name: str, pdu_name: str) -> bool:
         """
         Declare that you want to read data from a specified PDU.
@@ -274,7 +312,7 @@ class PduManager:
             print(f"[WARN] Unknown PDU: {robot_name}/{pdu_name}")
             return False
 
-        magic_number = 0x52455044 if is_read else 0x57505044
+        magic_number = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
         pdu_raw_data = bytearray(magic_number.to_bytes(4, byteorder='little'))
         return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
 
