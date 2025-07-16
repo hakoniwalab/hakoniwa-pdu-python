@@ -3,8 +3,8 @@
 import json
 import sys
 
-from hako_binary import binary_io
-from hako_binary import offset_parser
+from . import binary_io
+from . import offset_parser
 
 class DynamicAllocator:
     def __init__(self, is_heap: bool):

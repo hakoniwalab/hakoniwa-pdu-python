@@ -4,8 +4,8 @@ import json
 import sys
 import base64
 
-from hako_binary import binary_io
-from hako_binary import offset_parser
+from . import binary_io
+from . import offset_parser
 
 def decode_base64(data):
     return base64.b64decode(data)
