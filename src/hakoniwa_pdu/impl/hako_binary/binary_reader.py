@@ -6,11 +6,12 @@ import base64
 
 from . import binary_io
 from . import offset_parser
+from . import offset_map
 
 def decode_base64(data):
     return base64.b64decode(data)
 
-def binary_read(offmap, typename, binary_data):
+def binary_read(offmap, typename, binary_data) -> dict:
     json_data = {}
     meta_parser = binary_io.PduMetaDataParser()
     meta = meta_parser.load_pdu_meta(binary_data)
@@ -80,3 +81,20 @@ def binary_read_recursive(meta: binary_io.PduMetaData, offmap, binary_data, json
                 json_data[name] = array_value
 
 
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("Usage: binary_reader.py <offset_path> <typename> <binary_file> ")
+        sys.exit()
+
+    offset_path=sys.argv[1] 
+    typename=sys.argv[2]
+    binary_filepath=sys.argv[3]
+    offmap = offset_map.create_offmap(offset_path)
+
+    json_data = {}
+    with open(binary_filepath, "rb") as f:
+        binary_data = bytearray(f.read())
+
+    json_data = binary_read(offmap, typename, binary_data)
+
+    print(json_data)
