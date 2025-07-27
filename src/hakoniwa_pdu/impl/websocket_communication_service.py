@@ -4,7 +4,7 @@ from typing import Optional
 from .data_packet import DataPacket
 from .communication_buffer import CommunicationBuffer
 from .icommunication_service import ICommunicationService
-
+from .pdu_channel_config import PduChannelConfig
 
 class WebSocketCommunicationService(ICommunicationService):
     def __init__(self):
@@ -15,9 +15,14 @@ class WebSocketCommunicationService(ICommunicationService):
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._receive_task: Optional[asyncio.Task] = None
 
-    async def start_service(self, comm_buffer: CommunicationBuffer, uri: str = "") -> bool:
+    def set_channel_config(self, config: PduChannelConfig):
+        """Set the PDU channel configuration."""
+        pass
+
+    async def start_service(self, comm_buffer: CommunicationBuffer, uri: str = "", polling_interval: float = 0.02) -> bool:
         self.comm_buffer = comm_buffer
         self.uri = uri
+        self.polling_interval = polling_interval
         self._loop = asyncio.get_event_loop()
 
         try:

@@ -210,3 +210,4 @@ __marimo__/
 *.pyo
 *.pyd
 .venv/
+*.DS_Store

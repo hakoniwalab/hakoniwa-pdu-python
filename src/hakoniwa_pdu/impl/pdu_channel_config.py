@@ -1,11 +1,49 @@
 import json
 from typing import Optional
 
+class PduIoInfo:
+    def __init__(self, robot_name: str, channel_id: int, org_name: str, pdu_size: int, pdu_type: str):
+        self.robot_name = robot_name
+        self.channel_id = channel_id
+        self.org_name = org_name
+        self.pdu_size = pdu_size
+        self.pdu_type = pdu_type
+
+    def __repr__(self):
+        return f"PduIoInfo(robot_name={self.robot_name}, channel_id={self.channel_id}, org_name={self.org_name}, pdu_size={self.pdu_size}, pdu_type={self.pdu_type})"
 
 class PduChannelConfig:
     def __init__(self, json_file_path: str):
         with open(json_file_path, 'r', encoding='utf-8') as f:
             self.config_dict = json.load(f)
+
+    def get_shm_pdu_readers(self) -> list:
+        """Get the list of PDU readers."""
+        pdu_readers = []
+        for robot in self.config_dict.get("robots", []):
+            for reader in robot.get("shm_pdu_readers", []):
+                pdu_readers.append(PduIoInfo(
+                    robot_name=robot.get("name"),
+                    channel_id=reader.get("channel_id"),
+                    org_name=reader.get("org_name"),
+                    pdu_size=reader.get("pdu_size", -1),
+                    pdu_type=reader.get("type")
+                ))
+        return pdu_readers
+
+    def get_shm_pdu_writers(self) -> list:
+        """Get the list of PDU writers."""
+        pdu_writers = []
+        for robot in self.config_dict.get("robots", []):
+            for writer in robot.get("shm_pdu_writers", []):
+                pdu_writers.append(PduIoInfo(
+                    robot_name=robot.get("name"),
+                    channel_id=writer.get("channel_id"),
+                    org_name=writer.get("org_name"),
+                    pdu_size=writer.get("pdu_size", -1),
+                    pdu_type=writer.get("type")
+                ))
+        return pdu_writers
 
     def get_pdu_name(self, robot_name: str, channel_id: int) -> Optional[str]:
         for robot in self.config_dict.get("robots", []):

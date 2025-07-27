@@ -1,8 +1,14 @@
 from abc import ABC, abstractmethod
+from .pdu_channel_config import PduChannelConfig
 
 class ICommunicationService(ABC):
     @abstractmethod
-    async def start_service(self, comm_buffer, uri: str = "") -> bool:
+    def set_channel_config(self, config: PduChannelConfig):
+        """Set the PDU channel configuration."""
+        pass
+
+    @abstractmethod
+    async def start_service(self, comm_buffer, uri: str = "", polling_interval: float = 0.02) -> bool:
         pass
 
     @abstractmethod
