@@ -76,7 +76,7 @@ class ShmCommunicationService(ICommunicationService):
                     data : bytearray = hakopy.pdu_read(reader.robot_name, reader.channel_id, reader.pdu_size)
                     if data:
                         packet = DataPacket(reader.robot_name, reader.channel_id, data)
-                        self.comm_buffer.add_packet(packet)
+                        self.comm_buffer.put_packet(packet)
                         print(f"[INFO] Received data for {reader.robot_name}:{reader.channel_id}")
                 # sleep 20msec
                 await asyncio.sleep(self.polling_interval)
