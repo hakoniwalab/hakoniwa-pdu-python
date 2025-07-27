@@ -83,6 +83,7 @@ class PduManager:
 
         # JSONファイルからPduChannelConfigを生成
         pdu_config = PduChannelConfig(config_path)
+        comm_service.set_channel_config(pdu_config)
 
         # CommunicationBufferにPduChannelConfigを渡して初期化
         self.comm_buffer = CommunicationBuffer(pdu_config)
