@@ -16,6 +16,19 @@ class ICommunicationService(ABC):
         pass
 
     @abstractmethod
+    def start_service_nowait(self, comm_buffer, uri: str = "") -> bool:
+        pass
+
+    @abstractmethod
+    def stop_service_nowait(self) -> bool:
+        pass
+
+    @abstractmethod
+    def run_nowait(self) -> bool:
+        pass
+
+
+    @abstractmethod
     def is_service_enabled(self) -> bool:
         pass
 

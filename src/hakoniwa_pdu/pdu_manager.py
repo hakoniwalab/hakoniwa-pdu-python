@@ -155,6 +155,50 @@ class PduManager:
         self.b_last_known_service_state = not result
         return result
 
+    def start_service_nowait(self, uri: str = "") -> bool:
+        """
+        Start the communication service without waiting for it to complete.
+
+        Args:
+            uri (str, optional): URI of the server to connect to (e.g., WebSocket URI). Defaults to "".
+
+        Returns:
+            bool: True if the service was successfully started, False otherwise.
+        """        
+        if not self.b_is_initialized or self.comm_service is None:
+            print("[ERROR] PduManager is not initialized or CommService is None")
+            return False
+        result = self.comm_service.start_service_nowait(self.comm_buffer, uri)
+        self.b_last_known_service_state = result
+        return result
+
+    def stop_service_nowait(self) -> bool:
+        """
+        Stop the currently running communication service without waiting for it to complete.
+
+        Returns:
+            bool: True if the service was successfully stopped, False otherwise.
+        """        
+        if not self.b_is_initialized or self.comm_service is None:
+            return False
+        result = self.comm_service.stop_service_nowait()
+        self.b_last_known_service_state = not result
+        return result
+    
+    def run_nowait(self) -> bool:
+        """
+        Run the communication service without waiting for it to complete.
+
+        Returns:
+            bool: True if the service was successfully started, False otherwise.
+        """        
+        if not self.b_is_initialized or self.comm_service is None:
+            print("[ERROR] PduManager is not initialized or CommService is None")
+            return False
+        result = self.comm_service.run_nowait()
+        self.b_last_known_service_state = result
+        return result
+
     def get_pdu_channel_id(self, robot_name: str, pdu_name: str) -> int:
         """
         Get the internal channel ID for a specific robot and PDU name.

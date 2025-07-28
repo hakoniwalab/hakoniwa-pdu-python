@@ -19,35 +19,17 @@ class ShmCommunicationService(ICommunicationService):
         self.config = config
 
     async def start_service(self, comm_buffer: CommunicationBuffer, uri: str = "", polling_interval: float = 0.02) -> bool:
-        if not self.config:
-            print("[ERROR] Channel configuration is not set")
-            return False
-        self.comm_buffer = comm_buffer
-        self.polling_interval = polling_interval
-        self._loop = asyncio.get_event_loop()
-
-        try:
-            self._receive_task = asyncio.create_task(self._receive_loop())
-            self.service_enabled = True
-            print("[INFO] Shm receive loop started")
-            return True
-        except Exception as e:
-            print(f"[ERROR] Failed to start Shm receive loop: {e}")
-            self.service_enabled = False
-            return False
-
-
+        return False  # Not implemented for SHM
     async def stop_service(self) -> bool:
+        return False  # Not implemented for SHM
+
+
+    def start_service_nowait(self, comm_buffer: CommunicationBuffer, uri: str = "") -> bool:
+        self.comm_buffer = comm_buffer
+        self.service_enabled = True
+        return True
+    def stop_service_nowait(self) -> bool:
         self.service_enabled = False
-
-        if self._receive_task:
-            self._receive_task.cancel()
-            try:
-                await self._receive_task
-            except asyncio.CancelledError:
-                pass
-
-        self._receive_task = None
         return True
 
     def is_service_enabled(self) -> bool:
@@ -63,24 +45,20 @@ class ShmCommunicationService(ICommunicationService):
             return False
         return True
 
-    async def _receive_loop(self):
+    def run_nowait(self) -> bool:
         if not self.config:
             print("[ERROR] Channel configuration is not set")
-            return
+            return False
         shm_pdu_readers = self.config.get_shm_pdu_readers()
         try:
-            # Main loop to read PDUs from shared memory
             # read PDU data from shared memory
-            while self.service_enabled:
-                for reader in shm_pdu_readers:
-                    data : bytearray = hakopy.pdu_read(reader.robot_name, reader.channel_id, reader.pdu_size)
-                    if data:
-                        packet = DataPacket(reader.robot_name, reader.channel_id, data)
-                        self.comm_buffer.put_packet(packet)
-                        print(f"[INFO] Received data for {reader.robot_name}:{reader.channel_id}")
-                # sleep 20msec
-                await asyncio.sleep(self.polling_interval)
-        except asyncio.CancelledError:
-            print("[INFO] Receive loop cancelled")
+            for reader in shm_pdu_readers:
+                data : bytearray = hakopy.pdu_read(reader.robot_name, reader.channel_id, reader.pdu_size)
+                if data:
+                    packet = DataPacket(reader.robot_name, reader.channel_id, data)
+                    self.comm_buffer.put_packet(packet)
+                    print(f"[INFO] Received data for {reader.robot_name}:{reader.channel_id}")
         except Exception as e:
             print(f"[ERROR] Receive loop failed: {e}")
+            return False
+        return True

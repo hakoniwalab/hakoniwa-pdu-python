@@ -57,6 +57,13 @@ class WebSocketCommunicationService(ICommunicationService):
         self._receive_task = None
         return True
 
+    def start_service_nowait(self, comm_buffer: CommunicationBuffer, uri: str = "") -> bool:
+        return False  # Not implemented for WebSocket
+    def stop_service_nowait(self) -> bool:
+        return False  # Not implemented for WebSocket
+    def run_nowait(self) -> bool:
+        return False  # Not implemented for WebSocket
+
     def is_service_enabled(self) -> bool:
         return self.service_enabled and self.websocket is not None
 
