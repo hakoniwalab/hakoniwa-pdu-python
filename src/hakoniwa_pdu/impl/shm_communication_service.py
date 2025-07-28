@@ -57,7 +57,7 @@ class ShmCommunicationService(ICommunicationService):
                 if data:
                     packet = DataPacket(reader.robot_name, reader.channel_id, data)
                     self.comm_buffer.put_packet(packet)
-                    print(f"[INFO] Received data for {reader.robot_name}:{reader.channel_id}")
+                    #print(f"[INFO] Received data for {reader.robot_name}:{reader.channel_id}")
         except Exception as e:
             print(f"[ERROR] Receive loop failed: {e}")
             return False
