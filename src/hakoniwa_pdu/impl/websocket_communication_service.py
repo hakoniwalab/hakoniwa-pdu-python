@@ -63,6 +63,8 @@ class WebSocketCommunicationService(ICommunicationService):
         return False  # Not implemented for WebSocket
     def run_nowait(self) -> bool:
         return False  # Not implemented for WebSocket
+    def send_data_nowait(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
+        return False # Not implemented for WebSocket
 
     def is_service_enabled(self) -> bool:
         return self.service_enabled and self.websocket is not None

@@ -248,6 +248,28 @@ class PduManager:
             return False
         return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
 
+    def flush_pdu_raw_data_nowait(self, robot_name: str, pdu_name: str, pdu_raw_data: bytearray) -> bool:
+        """
+        Send raw binary PDU data to the communication service without waiting.
+
+        Args:
+            robot_name (str): The name of the robot.
+            pdu_name (str): The name of the PDU.
+            pdu_raw_data (bytearray): Raw binary data to send.
+
+        Returns:
+            bool: True if the data was successfully sent, False otherwise.
+
+        Notes:
+            - PDU must have been declared before sending.
+        """        
+        if not self.is_service_enabled() or self.comm_service is None:
+            return False
+        channel_id = self.comm_buffer.get_pdu_channel_id(robot_name, pdu_name)
+        if channel_id < 0:
+            return False
+        return self.comm_service.send_data_nowait(robot_name, channel_id, pdu_raw_data)
+
     def read_pdu_raw_data(self, robot_name: str, pdu_name: str) -> Optional[bytearray]:
         """
         Read the latest raw binary data for the specified PDU.

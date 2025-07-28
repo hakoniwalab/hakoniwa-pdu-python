@@ -39,6 +39,9 @@ class ShmCommunicationService(ICommunicationService):
         return ""
 
     async def send_data(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
+        return False  # Not implemented for SHM
+
+    def send_data_nowait(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
         ret : bool = hakopy.pdu_write(robot_name, channel_id, pdu_data, len(pdu_data))
         if not ret:
             print(f"[ERROR] Failed to send data for {robot_name}:{channel_id}")
