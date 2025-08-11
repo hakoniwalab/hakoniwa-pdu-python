@@ -31,13 +31,6 @@ class HakoAssetServiceClient:
         self.request_channel_id, self.response_channel_id = ids
         return True
     
-    def get_empty_request(self):
-        pdu = self.pdu_manager.get_pdu(self.service_name, self.request_channel_id)
-        if pdu is None:
-            raise RuntimeError("Failed to get request PDU")
-        req_packet = pdu.get()
-        return req_packet['body']
-
     def request(self, request_data, timeout_msec = -1, poll_interval_msec = -1):
         print(f"handle: {self.handle} Requesting {self.service_name} with data: {request_data}")
         byte_array = hakopy.asset_service_client_get_request_buffer(
