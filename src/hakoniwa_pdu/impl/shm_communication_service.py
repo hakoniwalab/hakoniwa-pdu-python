@@ -52,11 +52,10 @@ class ShmCommunicationService(ICommunicationService):
         if not self.config:
             print("[ERROR] Channel configuration is not set")
             return False
-        shm_pdu_readers = self.config.get_shm_pdu_readers()
-        shm_pdu_readers += self.config.get_shm_pdu_writers()
+        unique_list = list(set(self.get_shm_pdu_readers()) | set(self.get_shm_pdu_writers()))
         try:
             # read PDU data from shared memory
-            for reader in shm_pdu_readers:
+            for reader in unique_list:
                 data : bytearray = hakopy.pdu_read(reader.robot_name, reader.channel_id, reader.pdu_size)
                 if data:
                     packet = DataPacket(reader.robot_name, reader.channel_id, data)

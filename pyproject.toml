@@ -1,6 +1,6 @@
 [project]
 name = "hakoniwa-pdu"
-version = "0.8.4"
+version = "0.8.5"
 description = "Hakoniwa PDU communication library for Python"
 readme = "README.md"
 license = {file = "LICENSE"}

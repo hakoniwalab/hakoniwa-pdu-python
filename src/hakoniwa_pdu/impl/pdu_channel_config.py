@@ -12,6 +12,15 @@ class PduIoInfo:
     def __repr__(self):
         return f"PduIoInfo(robot_name={self.robot_name}, channel_id={self.channel_id}, org_name={self.org_name}, pdu_size={self.pdu_size}, pdu_type={self.pdu_type})"
 
+    def __eq__(self, other):
+        if not isinstance(other, PduIoInfo):
+            return NotImplemented
+        return (self.robot_name, self.channel_id, self.org_name, self.pdu_size, self.pdu_type) == \
+               (other.robot_name, other.channel_id, other.org_name, other.pdu_size, other.pdu_type)
+
+    def __hash__(self):
+        return hash((self.robot_name, self.channel_id, self.org_name, self.pdu_size, self.pdu_type))
+
 class PduChannelConfig:
     def __init__(self, json_file_path: str):
         with open(json_file_path, 'r', encoding='utf-8') as f:
