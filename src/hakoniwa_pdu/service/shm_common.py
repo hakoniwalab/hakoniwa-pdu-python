@@ -76,3 +76,30 @@ class ShmCommon:
     def reset_service(self):
         hakopy.trigger_event(hakopy.HAKO_TRIGGER_EVENT_ID_RESET)
         return True
+
+    def read_topic(self, node_name: str, topic_name: str):
+        if self.pdu_manager is None:
+            raise RuntimeError("PDU manager is not initialized")
+        channel_id = self.pdu_manager.get_pdu_channel_id(node_name, topic_name)
+        if channel_id is None:
+            raise RuntimeError(f"PDU not found: {node_name}, {topic_name}")
+
+        ret = hakopy.check_data_recv_event(node_name, channel_id)
+        if ret == False:
+            return None
+        self.pdu_manager.run_nowait()
+        raw_data = self.pdu_manager.read_pdu_raw_data(node_name, topic_name)
+        if raw_data is None or len(raw_data) == 0:
+            return None
+        return raw_data
+
+    def subscribe_topic(self, node_name: str, topic_name: str):
+        if self.pdu_manager is None:
+            raise RuntimeError("PDU manager is not initialized")
+        channel_id = self.pdu_manager.get_pdu_channel_id(node_name, topic_name)
+        if channel_id is None:
+            raise RuntimeError(f"PDU not found: {node_name}, {topic_name}")
+        ret = hakopy.register_data_recv_event(node_name, channel_id, None)
+        if ret != 0:
+            raise RuntimeError(f"Failed to register data receive event: {node_name}, {topic_name}")
+        return True
