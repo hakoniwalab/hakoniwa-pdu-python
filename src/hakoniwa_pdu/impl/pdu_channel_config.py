@@ -26,6 +26,12 @@ class PduChannelConfig:
         with open(json_file_path, 'r', encoding='utf-8') as f:
             self.config_dict = json.load(f)
 
+    def update_pdudef(self, pdudef: dict):
+        self.config_dict = pdudef
+
+    def get_pdudef(self) -> dict:
+        return self.config_dict
+
     def get_shm_pdu_readers(self) -> list:
         """Get the list of PDU readers."""
         pdu_readers = []

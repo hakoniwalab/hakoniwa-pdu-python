@@ -82,15 +82,15 @@ class PduManager:
             raise ValueError("CommService is None")
 
         # JSONファイルからPduChannelConfigを生成
-        pdu_config = PduChannelConfig(config_path)
-        comm_service.set_channel_config(pdu_config)
+        self.pdu_config = PduChannelConfig(config_path)
+        comm_service.set_channel_config(self.pdu_config)
 
         # CommunicationBufferにPduChannelConfigを渡して初期化
-        self.comm_buffer = CommunicationBuffer(pdu_config)
+        self.comm_buffer = CommunicationBuffer(self.pdu_config)
         self.comm_service = comm_service
         self.b_is_initialized = True
         hako_binary_path = os.getenv('HAKO_BINARY_PATH', '/usr/local/lib/hakoniwa/hako_binary/offset')
-        self.pdu_convertor = PduConvertor(hako_binary_path, pdu_config)
+        self.pdu_convertor = PduConvertor(hako_binary_path, self.pdu_config)
         print("[INFO] PduManager initialized")
 
     def is_service_enabled(self) -> bool:
