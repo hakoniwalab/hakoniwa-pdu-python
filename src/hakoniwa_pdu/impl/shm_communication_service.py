@@ -53,6 +53,7 @@ class ShmCommunicationService(ICommunicationService):
             print("[ERROR] Channel configuration is not set")
             return False
         shm_pdu_readers = self.config.get_shm_pdu_readers()
+        shm_pdu_readers += self.config.get_shm_pdu_writers()
         try:
             # read PDU data from shared memory
             for reader in shm_pdu_readers:
