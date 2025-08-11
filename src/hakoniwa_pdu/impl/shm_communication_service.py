@@ -52,7 +52,7 @@ class ShmCommunicationService(ICommunicationService):
         if not self.config:
             print("[ERROR] Channel configuration is not set")
             return False
-        unique_list = list(set(self.get_shm_pdu_readers()) | set(self.get_shm_pdu_writers()))
+        unique_list = list(set(self.config.get_shm_pdu_readers()) | set(self.config.get_shm_pdu_writers()))
         try:
             # read PDU data from shared memory
             for reader in unique_list:
