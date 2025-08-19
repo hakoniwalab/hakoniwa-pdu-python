@@ -113,13 +113,11 @@ def main():
         return 1
     
     # サービスを初期化
-    if hakopy.service_initialize(SERVICE_CONFIG_PATH) < 0:
+    if pdu_manager.initialize_services(SERVICE_CONFIG_PATH) < 0:
         print(f"ERROR: hako_asset_service_initialize() failed.")
         hakopy.conductor_stop()
         return 1
 
-    # service.jsonに基づいたサービス関連の準備を行う
-    pdu_manager.prepare_services(SERVICE_CONFIG_PATH)
 
     # シミュレーションを開始
     hakopy.start()

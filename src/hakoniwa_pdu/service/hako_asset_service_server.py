@@ -59,6 +59,7 @@ class HakoAssetServiceServer:
             raw_data = self.pdu_manager.read_pdu_raw_data(self.service_name, pdu_name)
             if raw_data is None or len(raw_data) == 0:
                 raise Exception("Failed to read request packet")
+            print(f"Request PDU data: {raw_data}")
             self.req_packet = self.req_decoder(raw_data)
             if self.req_packet is None:
                 raise Exception("Failed to decode request packet")

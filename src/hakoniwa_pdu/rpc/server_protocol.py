@@ -44,6 +44,7 @@ class ServerProtocol:
                 try:
                     # PDUをデコードし、ハンドラを呼び出し、レスポンスをエンコードする
                     request_data = self.req_decoder(req_pdu_data)
+                    print(f"Request data: {request_data}")
                     response_data = await handler(request_data)
                     res_pdu_data = self.res_encoder(response_data)
 

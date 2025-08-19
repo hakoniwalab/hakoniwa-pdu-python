@@ -14,6 +14,9 @@ class IPduServiceManager(PduManager, ABC):
     """
 
     # --- サーバー側操作 ---
+    @abstractmethod
+    def initialize_services(self, service_config_path: str) -> int:
+        pass
 
     @abstractmethod
     def start_service(self, service_name: str, max_clients: int) -> bool:
