@@ -2,7 +2,9 @@ import hakopy
 from typing import Any, Tuple, Optional, Dict
 
 from .ipdu_service_manager import IPduServiceManager, ClientId, PduData, Event
+from .service_config import ServiceConfig
 from hakoniwa_pdu.impl.shm_communication_service import ShmCommunicationService
+from hakoniwa_pdu.impl.hako_binary import offset_map
 
 class ShmPduServiceManager(IPduServiceManager):
     """
@@ -10,25 +12,36 @@ class ShmPduServiceManager(IPduServiceManager):
     内部でhakopyライブラリを呼び出す。
     """
 
-    def __init__(self, asset_name: str, config_path: str):
+    def __init__(self, asset_name: str, service_config_path: str, offset_path: str):
         """
         ShmPduServiceManagerを初期化する。
 
         Args:
             asset_name: アセット名。
-            config_path: pdu_config.jsonのパス。
+            service_config_path: service.jsonのパス。
+            offset_path: オフセットファイルのディレクトリパス。
         """
         super().__init__()
+
+        # ServiceConfigの初期化
+        offmap = offset_map.create_offmap(offset_path)
+        self.service_config = ServiceConfig(service_config_path, offmap, hakopy=hakopy)
+        pdu_config_path = self.service_config.service_config['pdu_config_path']
+
         # PduManagerの初期化シーケンス
-        self.initialize(config_path=config_path, comm_service=ShmCommunicationService())
+        self.initialize(config_path=pdu_config_path, comm_service=ShmCommunicationService())
         self.start_service_nowait()
+
+        # サービス用のPDU定義を既存の定義に追記
+        pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
+        self.pdu_config.update_pdudef(pdudef)
 
         # hakopyの初期化
         if not hakopy.init_for_external():
             raise RuntimeError("Failed to initialize hakopy for external process")
 
         self.asset_name = asset_name
-        self.service_map: Dict[str, int] = {}  # service_name -> service_id
+        self.service_id_map: Dict[int, str] = {}  # service_id -> service_name
         self.client_handles: Dict[ClientId, Any] = {}  # client_id -> hakopy handle
         self.current_server_client_info: Dict[str, Any] = {}
 
@@ -38,15 +51,15 @@ class ShmPduServiceManager(IPduServiceManager):
         service_id = hakopy.asset_service_create(self.asset_name, service_name)
         if service_id < 0:
             return False
-        self.service_map[service_name] = service_id
+        self.service_id_map[service_id] = service_name
         return True
 
     def poll_request(self) -> Event:
         # 複数のサービスを管理する場合、どのサービスをポーリングするかの指定が必要だが、
         # ここでは最初に作られたサービスを対象とする簡易的な実装とする。
-        if not self.service_map:
+        if not self.service_id_map:
             raise RuntimeError("No service started.")
-        service_id = list(self.service_map.values())[0]
+        service_id = list(self.service_id_map.keys())[0]
         
         event = hakopy.asset_service_server_poll(service_id)
         if self.is_server_event_request_in(event) or self.is_server_event_cancel(event):
@@ -65,7 +78,11 @@ class ShmPduServiceManager(IPduServiceManager):
             raise RuntimeError("No active request. Call poll_request() first.")
         
         info = self.current_server_client_info
-        service_name = list(self.service_map.keys())[0] # 仮
+        service_id = info['service_id']
+        service_name = self.service_id_map.get(service_id)
+        if service_name is None:
+            raise RuntimeError(f"Unknown service_id: {service_id}")
+
         pdu_name = self.pdu_channel_config.get_pdu_name(service_name, info['req_channel_id'])
         
         self.run_nowait()  # PDUバッファを更新
