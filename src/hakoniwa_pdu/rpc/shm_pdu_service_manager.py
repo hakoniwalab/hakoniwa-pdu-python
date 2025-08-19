@@ -91,6 +91,15 @@ class ShmPduServiceManager(IPduServiceManager):
         pdu_data = self.read_pdu_raw_data(service_name, pdu_name)
         #print(f"Request PDU data: {pdu_data}")
         return (info['client_id'], pdu_data)
+    
+
+    def get_response_buffer(self, service_id: int, status, result_code):
+        # Get response buffer
+        byte_array = hakopy.asset_service_server_get_response_buffer(
+            service_id, status, result_code)
+        if byte_array is None:
+            raise Exception("Failed to get response byte array")
+        return byte_array
 
     def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
         service_id = self.current_server_client_info.get('service_id')

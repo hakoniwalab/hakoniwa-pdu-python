@@ -9,7 +9,7 @@ class ServerProtocol:
     """
     IPduServiceManagerを介してサーバーのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, pdu_manager: IPduServiceManager, req_decoder: Callable, res_encoder: Callable):
+    def __init__(self, pdu_manager: IPduServiceManager, req_decoder: Callable, res_encoder: Callable, res_decoder: Callable):
         """
         サーバープロトコルハンドラを初期化する。
 
@@ -21,6 +21,7 @@ class ServerProtocol:
         self.pdu_manager = pdu_manager
         self.req_decoder = req_decoder
         self.res_encoder = res_encoder
+        self.res_decoder = res_decoder
         self._is_serving = False
 
     async def serve(self, handler: RequestHandler, cancel_handler: RequestHandler = None, poll_interval: float = 0.01):
@@ -45,8 +46,12 @@ class ServerProtocol:
                     # PDUをデコードし、ハンドラを呼び出し、レスポンスをエンコードする
                     request_data = self.req_decoder(req_pdu_data)
                     print(f"Request data: {request_data}")
-                    response_data = await handler(request_data)
-                    res_pdu_data = self.res_encoder(response_data)
+                    response_data = await handler(request_data.body)
+                    import hakopy # TODO
+                    byte_array = self.pdu_manager.get_response_buffer(client_id, hakopy.HAKO_SERVICE_API_STATUS_DONE, hakopy.HAKO_SERVICE_API_RESULT_CODE_OK)
+                    r = self.res_decoder(byte_array)
+                    r.body = response_data
+                    res_pdu_data = self.res_encoder(r)
 
                     # レスポンスを送信
                     self.pdu_manager.put_response(client_id, res_pdu_data)

@@ -12,8 +12,8 @@ from hakoniwa_pdu.rpc.server_protocol import ServerProtocol
 # PDUの型定義とエンコーダ/デコーダをインポート
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponse import AddTwoIntsResponse
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import pdu_to_py_AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import py_to_pdu_AddTwoIntsResponsePacket
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import py_to_pdu_AddTwoIntsRequestPacket, pdu_to_py_AddTwoIntsRequestPacket
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import py_to_pdu_AddTwoIntsResponsePacket, pdu_to_py_AddTwoIntsResponsePacket
 
 # --- サーバー設定 ---
 ASSET_NAME = 'NewServer'
@@ -51,7 +51,8 @@ def my_on_initialize(context):
     server_protocol = ServerProtocol(
         pdu_manager=pdu_manager,
         req_decoder=pdu_to_py_AddTwoIntsRequestPacket, # リクエストのデコーダ
-        res_encoder=py_to_pdu_AddTwoIntsResponsePacket  # レスポンスのエンコーダ
+        res_encoder=py_to_pdu_AddTwoIntsResponsePacket,  # レスポンスのエンコーダ
+        res_decoder=pdu_to_py_AddTwoIntsResponsePacket  # レスポンスのデコーダ
     )
     print("Initialization complete.")
     return 0
