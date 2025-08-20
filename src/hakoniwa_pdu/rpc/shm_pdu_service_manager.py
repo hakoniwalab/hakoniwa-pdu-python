@@ -1,4 +1,6 @@
 import hakopy
+import sys
+import time
 from typing import Any, Tuple, Optional, Dict
 
 from .ipdu_service_manager import IPduServiceManager, ClientId, PduData, Event
@@ -35,8 +37,10 @@ class ShmPduServiceManager(IPduServiceManager):
         self.client_handles: Dict[ClientId, Any] = {}  # client_id -> hakopy handle
         self.current_server_client_info: Dict[str, Any] = {}
 
-    def initialize_services(self, service_config_path: str) -> int:
+    def initialize_services(self, service_config_path: str, delta_time_usec: int) -> int:
         self.service_config_path = service_config_path
+        self.delta_time_usec = delta_time_usec
+        self.delta_time_sec: float = delta_time_usec / 1_000_000.0
         return hakopy.service_initialize(self.service_config_path)
 
     # --- サーバー側操作 ---
@@ -54,12 +58,21 @@ class ShmPduServiceManager(IPduServiceManager):
             return False
         self.service_id_map[service_id] = service_name
         return True
+    
+    def sleep(self, time_sec: float) -> bool:
+        ret = hakopy.usleep(int(time_sec * 1000 * 1000))
+        if ret == False:
+            sys.exit(1)
+        time.sleep(time_sec)
+        return 0
 
     def poll_request(self) -> Event:
         # 複数のサービスを管理する場合、どのサービスをポーリングするかの指定が必要だが、
         # ここでは最初に作られたサービスを対象とする簡易的な実装とする。
         if not self.service_id_map:
             raise RuntimeError("No service started.")
+
+        self.sleep(self.delta_time_sec)
         service_id = list(self.service_id_map.keys())[0]
         
         event = hakopy.asset_service_server_poll(service_id)
@@ -74,6 +87,9 @@ class ShmPduServiceManager(IPduServiceManager):
             }
         return event
 
+    def get_response_buffer(self, client_id: ClientId, status: int, result_code: int) -> Optional[PduData]:
+        byte_array = self.pdu_manager.get_response_buffer(client_id, status, result_code)
+        return byte_array
 
     def get_request(self) -> Tuple[ClientId, PduData]:
         if not self.current_server_client_info:
@@ -87,7 +103,7 @@ class ShmPduServiceManager(IPduServiceManager):
         pdu_name = self.pdu_config.get_pdu_name(service_name, info['req_channel_id'])
         
         self.run_nowait()  # PDUバッファを更新
-        print(f'service_name: {service_name}, pdu_name: {pdu_name}')
+        #print(f'service_name: {service_name}, pdu_name: {pdu_name}')
         pdu_data = self.read_pdu_raw_data(service_name, pdu_name)
         #print(f"Request PDU data: {pdu_data}")
         return (info['client_id'], pdu_data)
@@ -103,6 +119,7 @@ class ShmPduServiceManager(IPduServiceManager):
 
     def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
         service_id = self.current_server_client_info.get('service_id')
+        #print(f"Putting response for client {client_id} on service {service_id}")
         return hakopy.asset_service_server_put_response(service_id, pdu_data)
 
     def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:

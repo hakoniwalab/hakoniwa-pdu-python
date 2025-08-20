@@ -114,7 +114,7 @@ def main():
         return 1
     
     # サービスを初期化
-    if pdu_manager.initialize_services(SERVICE_CONFIG_PATH) < 0:
+    if pdu_manager.initialize_services(SERVICE_CONFIG_PATH, DELTA_TIME_USEC) < 0:
         print(f"ERROR: hako_asset_service_initialize() failed.")
         hakopy.conductor_stop()
         return 1

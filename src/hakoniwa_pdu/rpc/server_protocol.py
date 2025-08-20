@@ -45,12 +45,12 @@ class ServerProtocol:
                 try:
                     # PDUをデコードし、ハンドラを呼び出し、レスポンスをエンコードする
                     request_data = self.req_decoder(req_pdu_data)
-                    print(f"Request data: {request_data}")
+                    #print(f"Request data: {request_data}")
                     response_data = await handler(request_data.body)
-                    import hakopy # TODO
-                    byte_array = self.pdu_manager.get_response_buffer(client_id, hakopy.HAKO_SERVICE_API_STATUS_DONE, hakopy.HAKO_SERVICE_API_RESULT_CODE_OK)
+                    byte_array = self.pdu_manager.get_response_buffer(client_id, self.pdu_manager.API_STATUS_DONE, self.pdu_manager.API_RESULT_CODE_OK)
                     r = self.res_decoder(byte_array)
                     r.body = response_data
+                    #print(f"Response data: {r}")
                     res_pdu_data = self.res_encoder(r)
 
                     # レスポンスを送信

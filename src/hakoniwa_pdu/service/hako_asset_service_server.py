@@ -98,6 +98,7 @@ class HakoAssetServiceServer:
         # Set the response packet
         r = self.res_decoder(byte_array)
         r.body = response
+        print(f"Response data: {r}")
         response_bytes = self.res_encoder(r)
         if response_bytes is None:
             raise Exception("Failed to get response bytes")

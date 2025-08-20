@@ -15,7 +15,7 @@ class IPduServiceManager(PduManager, ABC):
 
     # --- サーバー側操作 ---
     @abstractmethod
-    def initialize_services(self, service_config_path: str) -> int:
+    def initialize_services(self, service_config_path: str, delta_time_usec: int) -> int:
         pass
 
     @abstractmethod
@@ -29,6 +29,78 @@ class IPduServiceManager(PduManager, ABC):
 
         Returns:
             成功した場合はTrue。
+        """
+        pass
+
+    @abstractmethod
+    def sleep(self, time_sec: float) -> bool:
+        pass
+
+    # constants
+    #HAKO_SERVICE_CLIENT_API_OPCODE_REQUEST
+    #HAKO_SERVICE_CLIENT_API_EVENT_RESPONSE_IN
+    #HAKO_SERVICE_CLIENT_API_EVENT_REQUEST_CANCEL_DONE
+    #HAKO_SERVICE_CLIENT_API_EVENT_NONE
+    #HAKO_SERVICE_CLIENT_API_EVENT_REQUEST_TIMEOUT
+    #HAKO_SERVICE_SERVER_API_EVENT_REQUEST_IN
+    #HAKO_SERVICE_SERVER_API_EVENT_NONE
+    #HAKO_SERVICE_SERVER_API_EVENT_CANCEL
+
+    # ====== [ Common API Status / Result Codes ] ======
+    API_STATUS_NONE       = 0
+    API_STATUS_DOING      = 1
+    API_STATUS_CANCELING  = 2
+    API_STATUS_DONE       = 3
+    API_STATUS_ERROR      = 4
+
+    API_RESULT_CODE_OK       = 0
+    API_RESULT_CODE_ERROR    = 1
+    API_RESULT_CODE_CANCELED = 2
+    API_RESULT_CODE_INVALID  = 3
+    API_RESULT_CODE_BUSY     = 4
+
+    # ====== [ Client Opcode ] ======
+    CLIENT_API_OPCODE_REQUEST = 0
+    CLIENT_API_OPCODE_CANCEL  = 1
+
+    # ====== [ Client Events ] ======
+    CLIENT_API_EVENT_NONE              = 0
+    CLIENT_API_EVENT_RESPONSE_IN       = 1
+    CLIENT_API_EVENT_REQUEST_TIMEOUT   = 2
+    CLIENT_API_EVENT_REQUEST_CANCEL_DONE = 3
+
+    # ====== [ Client State ] ======
+    CLIENT_API_STATE_IDLE      = 0
+    CLIENT_API_STATE_DOING     = 1
+    CLIENT_API_STATE_CANCELING = 2
+
+    # ====== [ Server Events ] ======
+    SERVER_API_EVENT_NONE         = 0
+    SERVER_API_EVENT_REQUEST_IN   = 1
+    SERVER_API_EVENT_REQUEST_CANCEL = 2
+
+    # ====== [ Server Status ] ======
+    SERVER_API_STATUS_IDLE      = 0
+    SERVER_API_STATUS_DOING     = 1
+    SERVER_API_STATUS_CANCELING = 2
+
+    # ====== [ Trigger Events ] ======
+    TRIGGER_EVENT_ID_START = 0
+    TRIGGER_EVENT_ID_STOP  = 1
+    TRIGGER_EVENT_ID_RESET = 2
+
+    @abstractmethod
+    def get_response_buffer(self, client_id: ClientId, status: int, result_code: int) -> Optional[PduData]:
+        """
+        指定されたクライアントのレスポンスバッファを取得する。
+
+        Args:
+            client_id: クライアントID。
+            status: ステータスコード。
+            result_code: 結果コード。
+
+        Returns:
+            レスポンスPDUデータ。取得できなかった場合はNone。
         """
         pass
 
