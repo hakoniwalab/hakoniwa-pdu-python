@@ -44,16 +44,20 @@ def my_on_initialize(context):
     """
     global pdu_manager, server_protocol
     print(f"Starting service: {SERVICE_NAME}")
-    # サービスを開始
-    pdu_manager.start_service(SERVICE_NAME, max_clients=1)
-
     # サーバープロトコルを初期化
     server_protocol = ServerProtocol(
+        service_name=SERVICE_NAME,
+        max_clients=1,
         pdu_manager=pdu_manager,
         req_decoder=pdu_to_py_AddTwoIntsRequestPacket, # リクエストのデコーダ
         res_encoder=py_to_pdu_AddTwoIntsResponsePacket,  # レスポンスのエンコーダ
         res_decoder=pdu_to_py_AddTwoIntsResponsePacket  # レスポンスのデコーダ
     )
+    # サービスを開始
+    if not server_protocol.start_service():
+        print("Failed to start service.")
+        return 1
+
     print("Initialization complete.")
     return 0
 

@@ -9,20 +9,27 @@ class ServerProtocol:
     """
     IPduServiceManagerを介してサーバーのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, pdu_manager: IPduServiceManager, req_decoder: Callable, res_encoder: Callable, res_decoder: Callable):
+    def __init__(self, service_name: str, max_clients: int, pdu_manager: IPduServiceManager, req_decoder: Callable, res_encoder: Callable, res_decoder: Callable):
         """
         サーバープロトコルハンドラを初期化する。
 
         Args:
+            service_name: サービスの名前。
+            max_clients: 最大クライアント数
             pdu_manager: IPduServiceManagerを実装したインスタンス。
             req_decoder: リクエストPDUをデコードする関数 (bytes -> dict)。
             res_encoder: レスポンスPDUをエンコードする関数 (dict -> bytes)。
         """
+        self.service_name = service_name
+        self.max_clients = max_clients
         self.pdu_manager = pdu_manager
         self.req_decoder = req_decoder
         self.res_encoder = res_encoder
         self.res_decoder = res_decoder
         self._is_serving = False
+    
+    def start_service(self) -> bool:
+        return self.pdu_manager.start_service(self.service_name, max_clients=self.max_clients)
 
     async def serve(self, handler: RequestHandler, cancel_handler: RequestHandler = None, poll_interval: float = 0.01):
         """

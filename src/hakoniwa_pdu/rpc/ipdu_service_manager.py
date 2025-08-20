@@ -37,14 +37,6 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     # constants
-    #HAKO_SERVICE_CLIENT_API_OPCODE_REQUEST
-    #HAKO_SERVICE_CLIENT_API_EVENT_RESPONSE_IN
-    #HAKO_SERVICE_CLIENT_API_EVENT_REQUEST_CANCEL_DONE
-    #HAKO_SERVICE_CLIENT_API_EVENT_NONE
-    #HAKO_SERVICE_CLIENT_API_EVENT_REQUEST_TIMEOUT
-    #HAKO_SERVICE_SERVER_API_EVENT_REQUEST_IN
-    #HAKO_SERVICE_SERVER_API_EVENT_NONE
-    #HAKO_SERVICE_SERVER_API_EVENT_CANCEL
 
     # ====== [ Common API Status / Result Codes ] ======
     API_STATUS_NONE       = 0
@@ -173,6 +165,10 @@ class IPduServiceManager(PduManager, ABC):
             pdu_data: 送信するリクエストPDUデータ。
             timeout_msec: タイムアウト（ミリ秒）。
         """
+        pass
+
+    @abstractmethod
+    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int) -> bytes:
         pass
 
     @abstractmethod

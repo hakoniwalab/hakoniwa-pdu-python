@@ -6,7 +6,7 @@ class ClientProtocol:
     """
     IPduServiceManagerを介してクライアントのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, pdu_manager: IPduServiceManager, service_name: str, client_name: str, req_encoder: Callable, res_decoder: Callable):
+    def __init__(self, pdu_manager: IPduServiceManager, service_name: str, client_name: str, req_encoder: Callable, req_decoder: Callable, res_decoder: Callable):
         """
         クライアントプロトコルハンドラを初期化する。
 
@@ -15,12 +15,14 @@ class ClientProtocol:
             service_name: 接続先のサービス名。
             client_name: このクライアントの名称。
             req_encoder: リクエストPDUをエンコードする関数 (dict -> bytes)。
+            req_decoder: リクエストPDUをデコードする関数 (bytes -> dict)。
             res_decoder: レスポンスPDUをデコードする関数 (bytes -> dict)。
         """
         self.pdu_manager = pdu_manager
         self.service_name = service_name
         self.client_name = client_name
         self.req_encoder = req_encoder
+        self.req_decoder = req_decoder
         self.res_decoder = res_decoder
         self.client_id: ClientId = None
 
@@ -54,20 +56,33 @@ class ClientProtocol:
         if self.client_id is None:
             raise RuntimeError("Client is not registered. Call register() first.")
 
-        req_pdu_data = self.req_encoder(request_data)
-        
+        poll_interval_msec = int(poll_interval * 1000)  # 秒からミリ秒に変換
+        byte_array = self.pdu_manager.get_request_buffer(
+            self.client_id, self.pdu_manager.CLIENT_API_OPCODE_REQUEST, poll_interval_msec)
+        if byte_array is None:
+            raise Exception("Failed to get request byte array")
+
+        req_packet = self.req_decoder(byte_array)
+        req_packet.body = request_data
+
+        req_pdu_data = self.req_encoder(req_packet)
+
         if not self.pdu_manager.call_request(self.client_id, req_pdu_data, timeout_msec):
             print("Failed to send request.")
             return None
-
+        print(f"Request sent successfully: {request_data}")
         # TODO: タイムアウト処理をより厳密に実装する
         while True:
+            print(f'Polling for response...')
             event = self.pdu_manager.poll_response(self.client_id)
 
             if self.pdu_manager.is_client_event_response_in(event):
-                res_pdu_data = self.pdu_manager.get_response(self.client_id)
+                print(f"Response received successfully.")
+                res_pdu_data = self.pdu_manager.get_response(self.service_name, self.client_id)
+                #print(f"Response PDU data: {res_pdu_data}")
                 response_data = self.res_decoder(res_pdu_data)
-                return response_data
+                print(f"Decoded response data: {response_data}")
+                return response_data.body
             
             if self.pdu_manager.is_client_event_timeout(event):
                 print("Request timed out.")
