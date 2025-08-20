@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, Callable
 from .ipdu_service_manager import IPduServiceManager, ClientId
 
-class ClientProtocol:
+class ProtocolClient:
     """
     IPduServiceManagerを介してクライアントのRPCプロトコルを処理するクラス。
     """

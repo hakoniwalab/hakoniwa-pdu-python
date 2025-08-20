@@ -7,7 +7,7 @@ from typing import Any
 
 # 新しいRPCコンポーネントをインポート
 from hakoniwa_pdu.rpc.shm.shm_pdu_service_manager import ShmPduServiceManager
-from hakoniwa_pdu.rpc.server_protocol import ServerProtocol
+from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
 
 # PDUの型定義とエンコーダ/デコーダをインポート
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
@@ -25,7 +25,7 @@ DELTA_TIME_USEC = 1000 * 1000
 
 # グローバル変数としてマネージャとプロトコルを保持
 pdu_manager: ShmPduServiceManager = None
-server_protocol: ServerProtocol = None
+protocol_server: ProtocolServer = None
 
 async def add_two_ints_handler(request: AddTwoIntsRequest) -> AddTwoIntsResponse:
     """
@@ -42,10 +42,10 @@ def my_on_initialize(context):
     """
     Hakoniwaアセットの初期化コールバック
     """
-    global pdu_manager, server_protocol
+    global pdu_manager, protocol_server
     print(f"Starting service: {SERVICE_NAME}")
     # サーバープロトコルを初期化
-    server_protocol = ServerProtocol(
+    protocol_server = ProtocolServer(
         service_name=SERVICE_NAME,
         max_clients=1,
         pdu_manager=pdu_manager,
@@ -54,7 +54,7 @@ def my_on_initialize(context):
         res_decoder=pdu_to_py_AddTwoIntsResponsePacket  # レスポンスのデコーダ
     )
     # サービスを開始
-    if not server_protocol.start_service():
+    if not protocol_server.start_service():
         print("Failed to start service.")
         return 1
 
@@ -65,15 +65,15 @@ def my_on_manual_timing_control(context):
     """
     Hakoniwaアセットのメインループコールバック
     """
-    global server_protocol
+    global protocol_server
     print("Server is running. Waiting for requests...")
     try:
         # サーバーのイベントループを開始
-        asyncio.run(server_protocol.serve(add_two_ints_handler))
+        asyncio.run(protocol_server.serve(add_two_ints_handler))
     except KeyboardInterrupt:
         print("\nServer stopped by user.")
     finally:
-        server_protocol.stop()
+        protocol_server.stop()
     return 0
 
 def my_on_reset(context):

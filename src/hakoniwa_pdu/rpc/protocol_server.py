@@ -5,7 +5,7 @@ from .ipdu_service_manager import IPduServiceManager
 # リクエストハンドラの型定義: async def handler(request) -> response
 RequestHandler = Callable[[Any], Awaitable[Any]]
 
-class ServerProtocol:
+class ProtocolServer:
     """
     IPduServiceManagerを介してサーバーのRPCプロトコルを処理するクラス。
     """

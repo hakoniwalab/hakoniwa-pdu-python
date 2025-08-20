@@ -6,7 +6,7 @@ import hakopy
 
 # 新しいRPCコンポーネントをインポート
 from hakoniwa_pdu.rpc.shm.shm_pdu_service_manager import ShmPduServiceManager
-from hakoniwa_pdu.rpc.client_protocol import ClientProtocol
+from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
 
 # PDUの型定義とエンコーダ/デコーダをインポート
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
@@ -24,13 +24,13 @@ DELTA_TIME_USEC = 1000 * 1000
 
 # グローバル変数としてマネージャとプロトコルを保持
 pdu_manager: ShmPduServiceManager = None
-client_protocol: ClientProtocol = None
+protocol_client: ProtocolClient = None
 
 async def run_rpc_client():
     """
     RPCクライアントのメインロジック
     """
-    global client_protocol
+    global protocol_client
 
     # 4. サーバーにRPCコールを実行
     try:
@@ -39,7 +39,7 @@ async def run_rpc_client():
         req.a = 10
         req.b = 20
         print(f"\nCalling RPC: a={req.a}, b={req.b}")
-        res = await client_protocol.call(req)
+        res = await protocol_client.call(req)
         if res:
             print(f"Response received: sum={res.sum}")
         else:
@@ -51,7 +51,7 @@ async def run_rpc_client():
             req.a = res.sum
             req.b = 5
             print(f"\nCalling RPC: a={req.a}, b={req.b}")
-            res = await client_protocol.call(req)
+            res = await protocol_client.call(req)
             if res:
                 print(f"Response received: sum={res.sum}")
             else:
@@ -69,10 +69,10 @@ def my_on_initialize(context):
     """
     Hakoniwaアセットの初期化コールバック
     """
-    global pdu_manager, client_protocol
+    global pdu_manager, protocol_client
     print("Initializing PDU Service Manager for SHM...")
 
-    client_protocol = ClientProtocol(
+    protocol_client = ProtocolClient(
         pdu_manager=pdu_manager,
         service_name=SERVICE_NAME,
         client_name=CLIENT_NAME,
@@ -82,7 +82,7 @@ def my_on_initialize(context):
     )
     # クライアントをサービスに登録
     print(f"Registering client '{CLIENT_NAME}' to service '{SERVICE_NAME}'...")
-    if not client_protocol.register():
+    if not protocol_client.register():
         print("Failed to register client. Exiting.")
         return 1
     
