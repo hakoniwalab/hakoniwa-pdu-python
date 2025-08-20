@@ -100,12 +100,7 @@ class ShmPduServiceManager(IPduServiceManager):
         if service_name is None:
             raise RuntimeError(f"Unknown service_id: {service_id}")
 
-        pdu_name = self.pdu_config.get_pdu_name(service_name, info['req_channel_id'])
-        
-        self.run_nowait()  # PDUバッファを更新
-        #print(f'service_name: {service_name}, pdu_name: {pdu_name}')
-        pdu_data = self.read_pdu_raw_data(service_name, pdu_name)
-        #print(f"Request PDU data: {pdu_data}")
+        pdu_data = hakopy.asset_service_server_get_request(service_id)
         return (info['client_id'], pdu_data)
     
 
@@ -173,11 +168,11 @@ class ShmPduServiceManager(IPduServiceManager):
         handle = self.client_handles.get(client_id)
         if not handle:
             raise ValueError(f"Invalid client_id: {client_id}")
-        #print(f"Getting response for service: {service_name}, client_id: {self.response_channel_id}")
-        pdu_name = self.pdu_config.get_pdu_name(service_name, self.response_channel_id)
-        self.run_nowait()
-        #print(f"Reading response PDU: {pdu_name} for service: {service_name}")
-        raw_data = self.read_pdu_raw_data(service_name, pdu_name)
+
+        raw_data = hakopy.asset_service_client_get_response(handle, -1)
+        if raw_data is None:
+            raise RuntimeError("Failed to get response byte array")
+
         if raw_data is None or len(raw_data) == 0:
             raise Exception("Failed to read response packet")
         return raw_data
