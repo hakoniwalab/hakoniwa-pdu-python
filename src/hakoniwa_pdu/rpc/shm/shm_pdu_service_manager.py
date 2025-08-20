@@ -3,8 +3,8 @@ import sys
 import time
 from typing import Any, Tuple, Optional, Dict
 
-from .ipdu_service_manager import IPduServiceManager, ClientId, PduData, Event
-from .service_config import ServiceConfig
+from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, Event
+from ..service_config import ServiceConfig
 from hakoniwa_pdu.impl.shm_communication_service import ShmCommunicationService
 from hakoniwa_pdu.impl.hako_binary import offset_map
 

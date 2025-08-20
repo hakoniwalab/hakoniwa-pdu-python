@@ -5,7 +5,7 @@ import sys
 import hakopy
 
 # 新しいRPCコンポーネントをインポート
-from hakoniwa_pdu.rpc.shm_pdu_service_manager import ShmPduServiceManager
+from hakoniwa_pdu.rpc.shm.shm_pdu_service_manager import ShmPduServiceManager
 from hakoniwa_pdu.rpc.client_protocol import ClientProtocol
 
 # PDUの型定義とエンコーダ/デコーダをインポート
