@@ -5,19 +5,30 @@ from .data_packet import DataPacket
 from .communication_buffer import CommunicationBuffer
 from .icommunication_service import ICommunicationService
 from .pdu_channel_config import PduChannelConfig
-
+from hakoniwa_pdu.impl.data_packet import (
+    DataPacket,
+    DECLARE_PDU_FOR_READ,
+    DECLARE_PDU_FOR_WRITE,
+    REQUEST_PDU_READ,
+    PDU_DATA,
+    REGISTER_RPC_SERVICE,
+    PDU_DATA_RPC_REQUEST,
+    PDU_DATA_RPC_REPLY
+)
 class WebSocketCommunicationService(ICommunicationService):
-    def __init__(self):
+    def __init__(self, version: str = "v1"):
         self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.uri: str = ""
         self.service_enabled: bool = False
         self.comm_buffer: Optional[CommunicationBuffer] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._receive_task: Optional[asyncio.Task] = None
+        self.version = version
+        self.handler = None
 
     def set_channel_config(self, config: PduChannelConfig):
         """Set the PDU channel configuration."""
-        pass
+        self.config = config
 
     async def start_service(self, comm_buffer: CommunicationBuffer, uri: str = "", polling_interval: float = 0.02) -> bool:
         self.comm_buffer = comm_buffer
@@ -28,7 +39,10 @@ class WebSocketCommunicationService(ICommunicationService):
         try:
             self.websocket = await websockets.connect(self.uri)
             self.service_enabled = True
-            self._receive_task = asyncio.create_task(self._receive_loop())
+            if self.version == "v1":
+                self._receive_task = asyncio.create_task(self._receive_loop_v1())
+            else:
+                self._receive_task = asyncio.create_task(self._receive_loop_v2())
             print("[INFO] WebSocket connected and receive loop started")
             return True
         except Exception as e:
@@ -98,7 +112,7 @@ class WebSocketCommunicationService(ICommunicationService):
             print(f"[ERROR] Failed to send binary data: {e}")
             return False
 
-    async def _receive_loop(self):
+    async def _receive_loop_v1(self):
         try:
             async for message in self.websocket:
                 if isinstance(message, bytes):
@@ -111,3 +125,25 @@ class WebSocketCommunicationService(ICommunicationService):
             print("[INFO] Receive loop cancelled")
         except Exception as e:
             print(f"[ERROR] Receive loop failed: {e}")
+
+
+    async def _receive_loop_v2(self):
+        try:
+            async for message in self.websocket:
+                if isinstance(message, bytes):
+                    packet = DataPacket.decode(bytearray(message), version=self.version)
+                    if packet and self.comm_buffer and packet.meta_pdu.message_type in [PDU_DATA, PDU_DATA_RPC_REQUEST, PDU_DATA_RPC_REPLY]:
+                        self.comm_buffer.put_packet(packet)
+                    elif packet and packet.meta_pdu.message_type in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_SERVICE] and self.handler:
+                        self.handler(packet)
+                    else:
+                        raise ValueError(f"Unknown message type: {packet.meta_pdu.message_type if packet else 'None'}")
+                else:
+                    print(f"[WARN] Unexpected message type: {type(message)}")
+        except asyncio.CancelledError:
+            print("[INFO] Receive loop cancelled")
+        except Exception as e:
+            print(f"[ERROR] Receive loop failed: {e}")
+
+    def register_event_handler(self, handler: callable):
+        self.handler = handler

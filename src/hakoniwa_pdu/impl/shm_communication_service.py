@@ -68,3 +68,7 @@ class ShmCommunicationService(ICommunicationService):
 
     async def send_binary(self, raw_data: bytearray) -> bool:
         pass # not supported
+
+    def register_event_handler(self, handler: callable):
+        """Register an event handler for a specific event type."""
+        pass

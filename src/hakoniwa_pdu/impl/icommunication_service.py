@@ -41,6 +41,10 @@ class ICommunicationService(ABC):
         pass
 
     @abstractmethod
+    def register_event_handler(self, handler: callable):
+        pass
+
+    @abstractmethod
     async def send_data_nowait(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
         pass
 

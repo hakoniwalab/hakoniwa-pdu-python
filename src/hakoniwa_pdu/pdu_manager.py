@@ -399,11 +399,9 @@ class PduManager:
             return False
         
         if self.wire_version == "v1":
-            magic_number = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
-            pdu_raw_data = bytearray(magic_number.to_bytes(4, byteorder='little'))
-            return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
+            raise NotImplementedError("register rpc service for v1 is not implemented")
         else:
-            meta_request_type = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
+            meta_request_type = REGISTER_RPC_SERVICE
             raw_data = self._build_binary(meta_request_type, robot_name, channel_id, None)
             return await self.comm_service.send_binary(raw_data)
 
