@@ -1,5 +1,6 @@
 from typing import Any, Tuple, Optional, Dict
 import asyncio
+import time
 
 from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, Event
 from hakoniwa_pdu.pdu_manager import PduManager
@@ -11,6 +12,12 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceRequestHeader import (
     pdu_to_py_ServiceRequestHeader,
     py_to_pdu_ServiceRequestHeader
 )
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceResponseHeader import ServiceResponseHeader
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceResponseHeader import (
+    pdu_to_py_ServiceResponseHeader,
+    py_to_pdu_ServiceResponseHeader
+)
+
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceResponseHeader import ServiceResponseHeader
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_RegisterClientRequestPacket import RegisterClientRequestPacket
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_RegisterClientResponse import RegisterClientResponse
@@ -118,6 +125,8 @@ class RemotePduServiceManager(IPduServiceManager):
 
     async def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
         # pdu_dataは、パケット形式になっているので、buildしてラップすればOK。
+        self.client_timeout_msec = timeout_msec
+        self.client_call_start_time_msec = int(time.time() * 1000)
         client_info: RegisterClientResponse = ClientId
         raw_data = self._build_binary(PDU_DATA_RPC_REQUEST, self.service_name, client_info.request_channel_id, pdu_data)
         if not await self.comm_service.send_binary(raw_data):
@@ -129,6 +138,7 @@ class RemotePduServiceManager(IPduServiceManager):
 
 
     def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int) -> bytes:
+        self.client_poll_interval_msec = poll_interval_msec
         header = ServiceRequestHeader()
         header.request_id = self.client_request_id
         header.service_name = self.service_name
@@ -140,16 +150,17 @@ class RemotePduServiceManager(IPduServiceManager):
 
 
     def poll_response(self, client_id: ClientId) -> Event:
-        """
-        クライアント側でサーバーからのイベント（レスポンス受信、タイムアウトなど）をポーリングする。
-
-        Args:
-            client_id: 登録時に取得したクライアントID。
-
-        Returns:
-            発生したイベントを示すオブジェクト。
-        """
-        pass
+        self.sleep(self.client_poll_interval_msec / 1000.0)  # ミリ秒から秒に変換
+        if self.comm_buffer.contains_buffer(self.service_name, self.client_name):
+            raw_data = self.comm_buffer.peek_buffer(self.service_name, self.client_name)
+            response_header: ServiceResponseHeader = pdu_to_py_ServiceResponseHeader(raw_data)
+            if response_header.result_code == IPduServiceManager.API_RESULT_CODE_CANCELED:
+                return self.CLIENT_API_EVENT_REQUEST_CANCEL_DONE
+            return self.CLIENT_API_EVENT_RESPONSE_IN
+        current_time_msec = int(time.time() * 1000)
+        if (current_time_msec - self.client_call_start_time_msec) > self.client_timeout_msec:
+            return self.CLIENT_API_EVENT_REQUEST_TIMEOUT
+        return self.CLIENT_API_EVENT_NONE
 
     def get_response(self, client_id: ClientId) -> PduData:
         """
@@ -161,7 +172,7 @@ class RemotePduServiceManager(IPduServiceManager):
         """
         pass
 
-    def cancel_request(self, client_id: ClientId) -> bool:
+    async def cancel_request(self, client_id: ClientId) -> bool:
         """
         送信済みのリクエストのキャンセルを要求する。
 
@@ -170,22 +181,21 @@ class RemotePduServiceManager(IPduServiceManager):
         """
         pass
 
+    def cancel_request_nowait(self, client_id: ClientId) -> bool:
+        raise NotImplementedError("cancel_request_nowait is not implemented")
 
 
     # --- クライアントイベント種別判定 ---
 
     def is_client_event_response_in(self, event: Event) -> bool:
-        """クライアント：レスポンス受信イベントか"""
-        pass
+        return event == self.CLIENT_API_EVENT_RESPONSE_IN
 
     def is_client_event_timeout(self, event: Event) -> bool:
-        """クライアント：タイムアウトイベントか"""
-        pass
+        return event == self.CLIENT_API_EVENT_REQUEST_TIMEOUT
 
     def is_client_event_cancel_done(self, event: Event) -> bool:
-        """クライアント：キャンセル完了イベントか"""
-        pass
+        return event == self.CLIENT_API_EVENT_REQUEST_CANCEL_DONE
 
     def is_client_event_none(self, event: Event) -> bool:
-        """クライアント：イベントが発生しなかったか"""
-        pass
+        return event == self.CLIENT_API_EVENT_NONE
+    

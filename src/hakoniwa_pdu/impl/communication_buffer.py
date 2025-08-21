@@ -17,6 +17,10 @@ class CommunicationBuffer:
         with self.lock:
             return self.pdu_buffer.pop((robot_name, pdu_name), bytearray())
 
+    def peek_buffer(self, robot_name: str, pdu_name: str) -> bytearray:
+        with self.lock:
+            return self.pdu_buffer.get((robot_name, pdu_name), bytearray())
+
     def contains_buffer(self, robot_name: str, pdu_name: str) -> bool:
         with self.lock:
             return (robot_name, pdu_name) in self.pdu_buffer
