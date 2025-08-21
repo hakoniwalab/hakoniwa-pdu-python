@@ -82,7 +82,7 @@ def my_on_initialize(context):
     )
     # クライアントをサービスに登録
     print(f"Registering client '{CLIENT_NAME}' to service '{SERVICE_NAME}'...")
-    if not protocol_client.register():
+    if not protocol_client.register_nowait():
         print("Failed to register client. Exiting.")
         return 1
     

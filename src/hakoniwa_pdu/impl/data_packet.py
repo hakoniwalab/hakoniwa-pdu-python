@@ -7,7 +7,7 @@ from hakoniwa_pdu.impl.hako_binary.binary_io import PduMetaData
 # 固定値（必要に応じて既存定義と統合）
 HAKO_META_MAGIC = 0x48414B4F  # "HAKO"
 HAKO_META_VER   = 0x0002
-META_FIXED_SIZE = 304
+META_FIXED_SIZE = 176
 TOTAL_PDU_META_SIZE = PduMetaData.PDU_META_DATA_SIZE + META_FIXED_SIZE
 
 # Magic numbers used for special control packets
@@ -17,7 +17,7 @@ DECLARE_PDU_FOR_WRITE = 0x57505044  # "WPPD"
 REQUEST_PDU_READ = 0x57505045
 
 PDU_DATA     = 0x42555043   # "CPUB"
-REGISTER_RPC_SERVICE    = 0x43505244   # "DRPC"
+REGISTER_RPC_CLIENT    = 0x43505244   # "DRPC"
 PDU_DATA_RPC_REQUEST     = 0x43505243   # "CRPC"
 PDU_DATA_RPC_REPLY       = 0x43505253   # "SRPC"
 

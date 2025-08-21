@@ -26,14 +26,14 @@ class ProtocolClient:
         self.res_decoder = res_decoder
         self.client_id: ClientId = None
 
-    def register(self) -> bool:
+    def register_nowait(self) -> bool:
         """
         クライアントをサービスに登録する。リクエスト送信前に呼び出す必要がある。
 
         Returns:
             登録に成功した場合はTrue。
         """
-        self.client_id = self.pdu_manager.register_client(self.service_name, self.client_name)
+        self.client_id = self.pdu_manager.register_client_nowait(self.service_name, self.client_name)
         if self.client_id is not None:
             print(f"Client '{self.client_name}' registered with service '{self.service_name}' (ID: {self.client_id})")
             return True

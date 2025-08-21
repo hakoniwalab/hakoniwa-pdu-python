@@ -130,7 +130,10 @@ class ShmPduServiceManager(IPduServiceManager):
 
     # --- クライアント側操作 ---
 
-    def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
+    async def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
+        raise NotImplementedError("Not supported")
+
+    def register_client_nowait(self, service_name: str, client_name: str) -> Optional[ClientId]:
         offmap = offset_map.create_offmap(self.offset_path)
         self.service_config = ServiceConfig(self.service_config_path, offmap, hakopy=hakopy)
 

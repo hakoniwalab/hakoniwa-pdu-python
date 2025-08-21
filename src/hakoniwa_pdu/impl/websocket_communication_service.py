@@ -11,10 +11,15 @@ from hakoniwa_pdu.impl.data_packet import (
     DECLARE_PDU_FOR_WRITE,
     REQUEST_PDU_READ,
     PDU_DATA,
-    REGISTER_RPC_SERVICE,
+    REGISTER_RPC_CLIENT,
     PDU_DATA_RPC_REQUEST,
     PDU_DATA_RPC_REPLY
 )
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceRequestHeader import ServiceRequestHeader
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceResponseHeader import ServiceResponseHeader
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceRequestHeader import pdu_to_py_ServiceRequestHeader
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceResponseHeader import pdu_to_py_ServiceResponseHeader
+
 class WebSocketCommunicationService(ICommunicationService):
     def __init__(self, version: str = "v1"):
         self.websocket: Optional[websockets.WebSocketClientProtocol] = None
@@ -132,9 +137,15 @@ class WebSocketCommunicationService(ICommunicationService):
             async for message in self.websocket:
                 if isinstance(message, bytes):
                     packet = DataPacket.decode(bytearray(message), version=self.version)
-                    if packet and self.comm_buffer and packet.meta_pdu.message_type in [PDU_DATA, PDU_DATA_RPC_REQUEST, PDU_DATA_RPC_REPLY]:
+                    if packet and self.comm_buffer and packet.meta_pdu.message_type in [PDU_DATA]:
                         self.comm_buffer.put_packet(packet)
-                    elif packet and packet.meta_pdu.message_type in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_SERVICE] and self.handler:
+                    elif packet and packet.meta_pdu.message_type in [PDU_DATA_RPC_REQUEST]:
+                        header: ServiceRequestHeader = pdu_to_py_ServiceRequestHeader(packet.get_pdu_data())
+                        self.comm_buffer.put_rpc_packet(header.service_name, header.client_name, packet.get_pdu_data())
+                    elif packet and packet.meta_pdu.message_type in [PDU_DATA_RPC_REPLY]:
+                        header: ServiceResponseHeader = pdu_to_py_ServiceResponseHeader(packet.get_pdu_data())
+                        self.comm_buffer.put_rpc_packet(header.service_name, header.client_name, packet.get_pdu_data())
+                    elif packet and packet.meta_pdu.message_type in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_CLIENT] and self.handler:
                         self.handler(packet)
                     else:
                         raise ValueError(f"Unknown message type: {packet.meta_pdu.message_type if packet else 'None'}")

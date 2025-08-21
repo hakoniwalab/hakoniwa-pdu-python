@@ -49,3 +49,6 @@ class CommunicationBuffer:
             print(f"[WARN] Unknown PDU for {robot_name}:{channel_id}")
             return
         self.set_buffer(robot_name, pdu_name, pdu_data)
+
+    def put_rpc_packet(self, service_name: str, client_name: str, pdu_data: bytearray):
+        self.set_buffer(service_name, client_name, pdu_data)

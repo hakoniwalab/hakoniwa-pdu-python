@@ -142,7 +142,11 @@ class IPduServiceManager(PduManager, ABC):
     # --- クライアント側操作 ---
 
     @abstractmethod
-    def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
+    async def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
+        pass
+    
+    @abstractmethod
+    def register_client_nowait(self, service_name: str, client_name: str) -> Optional[ClientId]:
         """
         クライアントとしてサービスに登録する。
 

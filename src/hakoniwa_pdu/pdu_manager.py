@@ -8,10 +8,7 @@ from hakoniwa_pdu.impl.data_packet import (
     DECLARE_PDU_FOR_READ,
     DECLARE_PDU_FOR_WRITE,
     REQUEST_PDU_READ,
-    PDU_DATA,
-    REGISTER_RPC_SERVICE,
-    PDU_DATA_RPC_REQUEST,
-    PDU_DATA_RPC_REPLY
+    PDU_DATA
 )
 from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig
 from hakoniwa_pdu.impl.pdu_convertor import PduConvertor
@@ -401,7 +398,7 @@ class PduManager:
         if self.wire_version == "v1":
             raise NotImplementedError("register rpc service for v1 is not implemented")
         else:
-            meta_request_type = REGISTER_RPC_SERVICE
+            meta_request_type = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
             raw_data = self._build_binary(meta_request_type, robot_name, channel_id, None)
             return await self.comm_service.send_binary(raw_data)
 
