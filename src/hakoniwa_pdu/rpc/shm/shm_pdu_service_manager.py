@@ -3,7 +3,7 @@ import sys
 import time
 from typing import Any, Tuple, Optional, Dict
 
-from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, Event
+from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, PyPduData, Event
 from ..service_config import ServiceConfig
 from hakoniwa_pdu.impl.shm_communication_service import ShmCommunicationService
 from hakoniwa_pdu.impl.hako_binary import offset_map
@@ -36,6 +36,7 @@ class ShmPduServiceManager(IPduServiceManager):
         self.service_id_map: Dict[int, str] = {}  # service_id -> service_name
         self.client_handles: Dict[ClientId, Any] = {}  # client_id -> hakopy handle
         self.current_server_client_info: Dict[str, Any] = {}
+
 
     def initialize_services(self, service_config_path: str, delta_time_usec: int) -> int:
         self.service_config_path = service_config_path

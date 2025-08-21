@@ -2,21 +2,12 @@ from typing import Any, Tuple, Optional, Dict
 import asyncio
 import time
 
-from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, Event
+from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, PyPduData, Event
 from hakoniwa_pdu.pdu_manager import PduManager
 from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
 from hakoniwa_pdu.rpc.service_config import ServiceConfig
 from hakoniwa_pdu.impl.hako_binary import offset_map
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceRequestHeader import ServiceRequestHeader
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceRequestHeader import (
-    pdu_to_py_ServiceRequestHeader,
-    py_to_pdu_ServiceRequestHeader
-)
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceResponseHeader import ServiceResponseHeader
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceResponseHeader import (
-    pdu_to_py_ServiceResponseHeader,
-    py_to_pdu_ServiceResponseHeader
-)
 
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceResponseHeader import ServiceResponseHeader
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_RegisterClientRequestPacket import RegisterClientRequestPacket
@@ -127,10 +118,11 @@ class RemotePduServiceManager(IPduServiceManager):
         # pdu_dataは、パケット形式になっているので、buildしてラップすればOK。
         self.client_timeout_msec = timeout_msec
         self.client_call_start_time_msec = int(time.time() * 1000)
-        client_info: RegisterClientResponse = ClientId
+        client_info: RegisterClientResponse = client_id
         raw_data = self._build_binary(PDU_DATA_RPC_REQUEST, self.service_name, client_info.request_channel_id, pdu_data)
         if not await self.comm_service.send_binary(raw_data):
             return False
+        self.request_buffer = raw_data
         return True
 
     def call_request_nowait(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
@@ -139,13 +131,13 @@ class RemotePduServiceManager(IPduServiceManager):
 
     def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int) -> bytes:
         self.client_poll_interval_msec = poll_interval_msec
-        header = ServiceRequestHeader()
-        header.request_id = self.client_request_id
-        header.service_name = self.service_name
-        header.client_name = self.client_name
-        header.opcode = opcode
-        header.status_poll_interval_msec = poll_interval_msec
-        pdu_data = py_to_pdu_ServiceRequestHeader(header)
+        py_pdu_data = self.cls_req_packet()
+        py_pdu_data.header.request_id = self.client_request_id
+        py_pdu_data.header.service_name = self.service_name
+        py_pdu_data.header.client_name = self.client_name
+        py_pdu_data.header.opcode = opcode
+        py_pdu_data.header.status_poll_interval_msec = poll_interval_msec
+        pdu_data = self.req_encoder(py_pdu_data)
         return pdu_data
 
 
@@ -153,9 +145,11 @@ class RemotePduServiceManager(IPduServiceManager):
         self.sleep(self.client_poll_interval_msec / 1000.0)  # ミリ秒から秒に変換
         if self.comm_buffer.contains_buffer(self.service_name, self.client_name):
             raw_data = self.comm_buffer.peek_buffer(self.service_name, self.client_name)
-            response_header: ServiceResponseHeader = pdu_to_py_ServiceResponseHeader(raw_data)
-            if response_header.result_code == IPduServiceManager.API_RESULT_CODE_CANCELED:
+            response = self.res_decoder(raw_data)
+            if response.header.result_code == IPduServiceManager.API_RESULT_CODE_CANCELED:
+                self.request_id = self.request_id + 1
                 return self.CLIENT_API_EVENT_REQUEST_CANCEL_DONE
+            self.request_id = self.request_id + 1
             return self.CLIENT_API_EVENT_RESPONSE_IN
         current_time_msec = int(time.time() * 1000)
         if (current_time_msec - self.client_call_start_time_msec) > self.client_timeout_msec:
@@ -163,23 +157,20 @@ class RemotePduServiceManager(IPduServiceManager):
         return self.CLIENT_API_EVENT_NONE
 
     def get_response(self, client_id: ClientId) -> PduData:
-        """
-        受信したレスポンスPDUデータを取得する。
-        poll_response()でレスポンス受信イベントを確認した後に呼び出す。
-
-        Args:
-            client_id: 登録時に取得したクライアントID。
-        """
-        pass
+        if self.comm_buffer.contains_buffer(self.service_name, self.client_name):
+            raw_data = self.comm_buffer.get_buffer(self.service_name, self.client_name)
+            return raw_data
+        raise RuntimeError("No response data available. Call poll_response() first.")
 
     async def cancel_request(self, client_id: ClientId) -> bool:
-        """
-        送信済みのリクエストのキャンセルを要求する。
-
-        Args:
-            client_id: 登録時に取得したクライアントID。
-        """
-        pass
+        py_pdu_data = self.req_decoder(self.request_buffer)
+        py_pdu_data.header.opcode = self.CLIENT_API_OPCODE_CANCEL
+        py_pdu_data.header.poll_interval_msec = -1
+        pdu_data = self.req_encoder(py_pdu_data)
+        if not await self.comm_service.send_binary(pdu_data):
+            return False
+        self.request_buffer = pdu_data
+        return True
 
     def cancel_request_nowait(self, client_id: ClientId) -> bool:
         raise NotImplementedError("cancel_request_nowait is not implemented")

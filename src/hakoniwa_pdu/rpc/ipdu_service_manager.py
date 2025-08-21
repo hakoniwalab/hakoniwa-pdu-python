@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from hakoniwa_pdu.pdu_manager import PduManager
-from typing import Any, Tuple, Optional
+from typing import Any, Tuple, Optional, Callable, Type
 
 # 型エイリアスを定義
 ClientId = Any
 PduData = bytearray
+PyPduData = Any  # Python側でのPDUデータ形式
+
 Event = Any  # poll結果として返される、実装依存のイベントオブジェクト
 
 class IPduServiceManager(PduManager, ABC):
@@ -12,6 +14,28 @@ class IPduServiceManager(PduManager, ABC):
     RPCサービスのプロトコル層(client_protocol, server_protocol)が利用するための、
     通信方式(SHM, Remote)に依存しない低レベル操作を定義するインターフェース。
     """
+    def register_req_serializer(self, cls_req_packet: Type[Any], req_encoder: Callable, req_decoder: Callable) -> None:
+        """
+        クライアントのリクエストPDUをエンコード/デコードする関数を登録する。
+
+        Args:
+            req_encoder: リクエストPDUをエンコードする関数 (dict -> bytes)。
+            req_decoder: リクエストPDUをデコードする関数 (bytes -> dict)。
+        """
+        self.cls_req_packet = cls_req_packet
+        self.req_encoder = req_encoder
+        self.req_decoder = req_decoder
+
+    def register_res_serializer(self, res_encoder: Callable, res_decoder: Callable) -> None:
+        """
+        クライアントのレスポンスPDUをエンコード/デコードする関数を登録する。
+
+        Args:
+            res_encoder: レスポンスPDUをエンコードする関数 (dict -> bytes)。
+            res_decoder: レスポンスPDUをデコードする関数 (bytes -> dict)。
+        """
+        self.res_encoder = res_encoder
+        self.res_decoder = res_decoder
 
     # --- サーバー側操作 ---
     @abstractmethod

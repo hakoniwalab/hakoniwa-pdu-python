@@ -1,12 +1,12 @@
 import asyncio
-from typing import Any, Callable
+from typing import Any, Callable, Type
 from .ipdu_service_manager import IPduServiceManager, ClientId
 
 class ProtocolClient:
     """
     IPduServiceManagerを介してクライアントのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, pdu_manager: IPduServiceManager, service_name: str, client_name: str, req_encoder: Callable, req_decoder: Callable, res_decoder: Callable):
+    def __init__(self, pdu_manager: IPduServiceManager, service_name: str, client_name: str, cls_req_packet: Type[Any], req_encoder: Callable, req_decoder: Callable, res_encoder: Callable, res_decoder: Callable):
         """
         クライアントプロトコルハンドラを初期化する。
 
@@ -21,10 +21,14 @@ class ProtocolClient:
         self.pdu_manager = pdu_manager
         self.service_name = service_name
         self.client_name = client_name
+        self.cls_req_packet = cls_req_packet
         self.req_encoder = req_encoder
         self.req_decoder = req_decoder
+        self.res_encoder = res_encoder
         self.res_decoder = res_decoder
         self.client_id: ClientId = None
+        self.pdu_manager.register_req_serializer(cls_req_packet, req_encoder, req_decoder)
+        self.pdu_manager.register_res_serializer(res_encoder, res_decoder)
 
     def register_nowait(self) -> bool:
         """

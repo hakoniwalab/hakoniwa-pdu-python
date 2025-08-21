@@ -10,8 +10,9 @@ from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
 
 # PDUの型定義とエンコーダ/デコーダをインポート
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequestPacket import AddTwoIntsRequestPacket
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket  import pdu_to_py_AddTwoIntsRequestPacket, py_to_pdu_AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import pdu_to_py_AddTwoIntsResponsePacket
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import pdu_to_py_AddTwoIntsResponsePacket, py_to_pdu_AddTwoIntsResponsePacket
 
 # --- クライアント設定 ---
 ASSET_NAME = 'NewClient'
@@ -76,8 +77,10 @@ def my_on_initialize(context):
         pdu_manager=pdu_manager,
         service_name=SERVICE_NAME,
         client_name=CLIENT_NAME,
+        cls_req_packet=AddTwoIntsRequestPacket,  # リクエストパケットのクラス
         req_encoder=py_to_pdu_AddTwoIntsRequestPacket, # リクエストのエンコーダ
         req_decoder=pdu_to_py_AddTwoIntsRequestPacket,  # リクエストのデコーダ
+        res_encoder=py_to_pdu_AddTwoIntsResponsePacket, # レスポンスのエンコーダ
         res_decoder=pdu_to_py_AddTwoIntsResponsePacket   # レスポンスのデコーダ
     )
     # クライアントをサービスに登録
