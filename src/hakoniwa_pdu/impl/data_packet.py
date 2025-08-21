@@ -52,9 +52,6 @@ class DataPacket:
     def set_real_time_usec(self, time_usec: int):
         self.meta_pdu.real_time_us = time_usec
 
-    def set_message_type(self, message_type: str):
-        self.meta_pdu.message_type = message_type
-
     def set_robot_name(self, name: str):
         self.robot_name = name
         self.meta_pdu.robot_name = name
