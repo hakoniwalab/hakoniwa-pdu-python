@@ -65,3 +65,6 @@ class ShmCommunicationService(ICommunicationService):
             print(f"[ERROR] Receive loop failed: {e}")
             return False
         return True
+
+    async def send_binary(self, raw_data: bytearray) -> bool:
+        pass # not supported

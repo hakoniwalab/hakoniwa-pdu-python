@@ -86,6 +86,18 @@ class WebSocketCommunicationService(ICommunicationService):
             print(f"[ERROR] Failed to send data: {e}")
             return False
 
+    async def send_binary(self, raw_data: bytearray) -> bool:
+        if not self.service_enabled or not self.websocket:
+            print("[WARN] WebSocket not connected")
+            return False
+
+        try:
+            await self.websocket.send(raw_data)
+            return True
+        except Exception as e:
+            print(f"[ERROR] Failed to send binary data: {e}")
+            return False
+
     async def _receive_loop(self):
         try:
             async for message in self.websocket:

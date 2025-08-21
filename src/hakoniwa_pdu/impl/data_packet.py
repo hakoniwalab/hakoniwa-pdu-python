@@ -2,13 +2,13 @@ import struct
 from typing import Optional
 from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_pytype_MetaPdu import MetaPdu
 from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_conv_MetaPdu import py_to_pdu_MetaPdu, pdu_to_py_MetaPdu
-from hakoniwa_pdu.impl.hako_binary.binary_io import PDU_META_DATA_SIZE
+from hakoniwa_pdu.impl.hako_binary.binary_io import PduMetaData
 
 # 固定値（必要に応じて既存定義と統合）
 HAKO_META_MAGIC = 0x48414B4F  # "HAKO"
 HAKO_META_VER   = 0x0002
-META_FIXED_SIZE = 304 
-TOTAL_PDU_META_SIZE = PDU_META_DATA_SIZE + META_FIXED_SIZE
+META_FIXED_SIZE = 304
+TOTAL_PDU_META_SIZE = PduMetaData.PDU_META_DATA_SIZE + META_FIXED_SIZE
 
 # Magic numbers used for special control packets
 DECLARE_PDU_FOR_READ = 0x52455044   # "REPD"
@@ -16,11 +16,10 @@ DECLARE_PDU_FOR_WRITE = 0x57505044  # "WPPD"
 # Request the server to immediately send the latest PDU for the given channel
 REQUEST_PDU_READ = 0x57505045
 
-CLIENT_PDU_PUBLISH     = 0x42555043   # "CPUB"
-SERVER_PDU_PUBLISH     = 0x42555053   # "SPUB"
-DECLARE_RPC_SERVICE    = 0x43505244   # "DRPC"
-CLIENT_RPC_REQUEST     = 0x43505243   # "CRPC"
-SERVER_RPC_REPLY       = 0x43505253   # "SRPC"
+PDU_DATA     = 0x42555043   # "CPUB"
+REGISTER_RPC_SERVICE    = 0x43505244   # "DRPC"
+PDU_DATA_RPC_REQUEST     = 0x43505243   # "CRPC"
+PDU_DATA_RPC_REPLY       = 0x43505253   # "SRPC"
 
 class DataPacket:
     def __init__(self, robot_name: str = "", channel_id: int = 0, body_data: bytearray | None = None,

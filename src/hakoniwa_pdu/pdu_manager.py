@@ -8,11 +8,10 @@ from hakoniwa_pdu.impl.data_packet import (
     DECLARE_PDU_FOR_READ,
     DECLARE_PDU_FOR_WRITE,
     REQUEST_PDU_READ,
-    CLIENT_PDU_PUBLISH,
-    SERVER_PDU_PUBLISH,
-    DECLARE_RPC_SERVICE,
-    CLIENT_RPC_REQUEST,
-    SERVER_RPC_REPLY
+    PDU_DATA,
+    REGISTER_RPC_SERVICE,
+    PDU_DATA_RPC_REQUEST,
+    PDU_DATA_RPC_REPLY
 )
 from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig
 from hakoniwa_pdu.impl.pdu_convertor import PduConvertor
@@ -49,7 +48,7 @@ class PduManager:
     - The environment variable `HAKO_BINARY_PATH` can be used to override the default offset file location.
     """
 
-    def __init__(self):
+    def __init__(self, *, wire_version: str = "v1"):
         """
         Initialize internal states of PduManager.
 
@@ -62,6 +61,7 @@ class PduManager:
         self.comm_service: Optional[ICommunicationService] = None
         self.b_is_initialized = False
         self.b_last_known_service_state = False
+        self.wire_version = wire_version  # "v1" or "v2"
 
     def get_default_offset_path(self) -> str:
         # インストール済パッケージ内の offset ディレクトリパスを取得
@@ -251,7 +251,12 @@ class PduManager:
         channel_id = self.comm_buffer.get_pdu_channel_id(robot_name, pdu_name)
         if channel_id < 0:
             return False
-        return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
+        
+        if self.wire_version == "v1":
+            return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
+        else:
+            raw_data = self._build_binary(PDU_DATA, robot_name, channel_id, pdu_raw_data)
+            return await self.comm_service.send_binary(raw_data)
 
     def flush_pdu_raw_data_nowait(self, robot_name: str, pdu_name: str, pdu_raw_data: bytearray) -> bool:
         """
@@ -273,7 +278,11 @@ class PduManager:
         channel_id = self.comm_buffer.get_pdu_channel_id(robot_name, pdu_name)
         if channel_id < 0:
             return False
-        return self.comm_service.send_data_nowait(robot_name, channel_id, pdu_raw_data)
+        
+        if self.wire_version == "v1":
+            return self.comm_service.send_data_nowait(robot_name, channel_id, pdu_raw_data)
+        else:
+            raise NotImplementedError("Wire version not supported")
 
     def read_pdu_raw_data(self, robot_name: str, pdu_name: str) -> Optional[bytearray]:
         """
@@ -308,10 +317,15 @@ class PduManager:
         if channel_id < 0:
             return None
 
-        # send request magic number
-        req_data = bytearray(REQUEST_PDU_READ.to_bytes(4, byteorder="little"))
-        if not await self.comm_service.send_data(robot_name, channel_id, req_data):
-            return None
+        if self.wire_version == "v1":
+            # send request magic number
+            req_data = bytearray(REQUEST_PDU_READ.to_bytes(4, byteorder="little"))
+            if not await self.comm_service.send_data(robot_name, channel_id, req_data):
+                return None
+        else:
+            raw_data = self._build_binary(REQUEST_PDU_READ, robot_name, channel_id, None)
+            if not await self.comm_service.send_binary(raw_data):
+                return None
 
         # wait for buffer to be filled
         loop = asyncio.get_event_loop()
@@ -383,10 +397,15 @@ class PduManager:
         if channel_id < 0:
             print(f"[WARN] Unknown PDU: {robot_name}/{pdu_name}")
             return False
-
-        magic_number = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
-        pdu_raw_data = bytearray(magic_number.to_bytes(4, byteorder='little'))
-        return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
+        
+        if self.wire_version == "v1":
+            magic_number = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
+            pdu_raw_data = bytearray(magic_number.to_bytes(4, byteorder='little'))
+            return await self.comm_service.send_data(robot_name, channel_id, pdu_raw_data)
+        else:
+            meta_request_type = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
+            raw_data = self._build_binary(meta_request_type, robot_name, channel_id, None)
+            return await self.comm_service.send_binary(raw_data)
 
     def log_current_state(self):
         """
@@ -399,3 +418,12 @@ class PduManager:
         print(f"  - CommBuffer Valid: {self.comm_buffer is not None}")
         print(f"  - CommService Valid: {self.comm_service is not None}")
         print(f"  - Last Known Service State: {self.b_last_known_service_state}")
+
+
+    def _build_binary(self, meta_request_type: int, robot_name: str, channel_id: int, pdu_data: bytearray) -> bytearray:
+        packet = DataPacket(
+            robot_name=robot_name,
+            channel_id=channel_id,
+            pdu_data=pdu_data
+        )
+        return packet.encode(version = "v2", meta_request_type=meta_request_type)

@@ -37,6 +37,10 @@ class ICommunicationService(ABC):
         pass
 
     @abstractmethod
+    async def send_binary(self, raw_data: bytearray) -> bool:
+        pass
+
+    @abstractmethod
     async def send_data_nowait(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
         pass
 
