@@ -41,18 +41,23 @@ class ProtocolClient:
             print(f"Failed to register client '{self.client_name}'")
             return False
 
-    async def call(self, request_data: Any, timeout_msec: int = 1000, poll_interval: float = 0.01) -> Any:
+    async def register(self) -> bool:
         """
-        サービスに対して同期的な呼び出し（リクエスト-レスポンス）を行う。
-
-        Args:
-            request_data: 送信するリクエストデータ (dictなど)。
-            timeout_msec: タイムアウト（ミリ秒）。
-            poll_interval: イベントがない場合のポーリング間隔（秒）。
+        クライアントをサービスに登録する。リクエスト送信前に呼び出す必要がある。
 
         Returns:
-            レスポンスデータ。タイムアウトやエラーの場合はNoneを返す。
+            登録に成功した場合はTrue。
         """
+        self.client_id = await self.pdu_manager.register_client(self.service_name, self.client_name)
+        if self.client_id is not None:
+            print(f"Client '{self.client_name}' registered with service '{self.service_name}' (ID: {self.client_id})")
+            return True
+        else:
+            print(f"Failed to register client '{self.client_name}'")
+            return False
+
+
+    def _create_request_packet(self, request_data: Any, poll_interval: float) -> bytes:
         if self.client_id is None:
             raise RuntimeError("Client is not registered. Call register() first.")
 
@@ -66,12 +71,9 @@ class ProtocolClient:
         req_packet.body = request_data
 
         req_pdu_data = self.req_encoder(req_packet)
+        return req_pdu_data
 
-        if not self.pdu_manager.call_request(self.client_id, req_pdu_data, timeout_msec):
-            print("Failed to send request.")
-            return None
-        print(f"Request sent successfully: {request_data}")
-        # TODO: タイムアウト処理をより厳密に実装する
+    def _wait_response(self) -> tuple[bool, Any]:
         while True:
             print(f'Polling for response...')
             event = self.pdu_manager.poll_response(self.client_id)
@@ -82,20 +84,70 @@ class ProtocolClient:
                 #print(f"Response PDU data: {res_pdu_data}")
                 response_data = self.res_decoder(res_pdu_data)
                 print(f"Decoded response data: {response_data}")
-                return response_data.body
+                return False, response_data.body
             
             if self.pdu_manager.is_client_event_timeout(event):
                 print("Request timed out.")
-                # タイムアウトした場合、キャンセルを試みる
-                await self.cancel()
-                return None
+                return True, None
 
             if self.pdu_manager.is_client_event_cancel_done(event):
                 print("Request successfully cancelled.")
-                return None
+                return False, None
             
             if self.pdu_manager.is_client_event_none(event):
-                await asyncio.sleep(poll_interval)
+                pass
+
+    async def call(self, request_data: Any, timeout_msec: int = 1000, poll_interval: float = 0.01) -> Any:
+        """
+        サービスに対して同期的な呼び出し（リクエスト-レスポンス）を行う。
+
+        Args:
+            request_data: 送信するリクエストデータ (dictなど)。
+            timeout_msec: タイムアウト（ミリ秒）。
+            poll_interval: イベントがない場合のポーリング間隔（秒）。
+
+        Returns:
+            レスポンスデータ。タイムアウトやエラーの場合はNoneを返す。
+        """
+        req_pdu_data = self._create_request_packet(request_data, poll_interval)
+
+        if not await self.pdu_manager.call_request(self.client_id, req_pdu_data, timeout_msec):
+            print("Failed to send request.")
+            return None
+        print(f"Request sent successfully: {request_data}")
+
+
+        is_timeout, response_data = self._wait_response()
+        if is_timeout:
+            await self.cancel()
+            return None
+        return response_data
+    
+    def call_nowait(self, request_data: Any, timeout_msec: int = 1000, poll_interval: float = 0.01) -> Any:
+        """
+        サービスに対して同期的な呼び出し（リクエスト-レスポンス）を行う。
+
+        Args:
+            request_data: 送信するリクエストデータ (dictなど)。
+            timeout_msec: タイムアウト（ミリ秒）。
+            poll_interval: イベントがない場合のポーリング間隔（秒）。
+
+        Returns:
+            レスポンスデータ。タイムアウトやエラーの場合はNoneを返す。
+        """
+        req_pdu_data = self._create_request_packet(request_data, poll_interval)
+
+        if not self.pdu_manager.call_request_nowait(self.client_id, req_pdu_data, timeout_msec):
+            print("Failed to send request.")
+            return None
+        print(f"Request sent successfully: {request_data}")
+
+
+        is_timeout, response_data = self._wait_response()
+        if is_timeout:
+            self.cancel_nowait()
+            return None
+        return response_data
 
     async def cancel(self) -> bool:
         """
@@ -105,3 +157,6 @@ class ProtocolClient:
             raise RuntimeError("Client is not registered.")
         
         return self.pdu_manager.cancel_request(self.client_id)
+
+    def cancel_nowait(self) -> bool:
+        raise NotImplementedError("cancel_nowait is not implemented in this ProtocolClient class.")

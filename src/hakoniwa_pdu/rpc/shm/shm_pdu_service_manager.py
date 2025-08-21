@@ -154,11 +154,14 @@ class ShmPduServiceManager(IPduServiceManager):
         #print(f'response_channel_id={self.response_channel_id} request_channel_id={self.request_channel_id}')
         return client_id
 
-    def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
+    def call_request_nowait(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
         handle = self.client_handles.get(client_id)
         if not handle:
             raise ValueError(f"Invalid client_id: {client_id}")
         return hakopy.asset_service_client_call_request(handle, pdu_data, timeout_msec)
+    
+    async def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
+        raise NotImplementedError("call_request is not implemented")
 
     def poll_response(self, client_id: ClientId) -> Event:
         self.sleep(self.delta_time_sec)
@@ -180,11 +183,14 @@ class ShmPduServiceManager(IPduServiceManager):
             raise Exception("Failed to read response packet")
         return raw_data
 
-    def cancel_request(self, client_id: ClientId) -> bool:
+    def cancel_request_nowait(self, client_id: ClientId) -> bool:
         handle = self.client_handles.get(client_id)
         if not handle:
             raise ValueError(f"Invalid client_id: {client_id}")
         return hakopy.asset_service_client_cancel_request(handle)
+    
+    async def cancel_request(self, client_id: ClientId) -> bool:
+        raise NotImplementedError("cancel_request is not implemented")
 
     # --- サーバーイベント種別判定 ---
 

@@ -39,7 +39,7 @@ async def run_rpc_client():
         req.a = 10
         req.b = 20
         print(f"\nCalling RPC: a={req.a}, b={req.b}")
-        res = await protocol_client.call(req)
+        res = protocol_client.call_nowait(req)
         if res:
             print(f"Response received: sum={res.sum}")
         else:
@@ -51,7 +51,7 @@ async def run_rpc_client():
             req.a = res.sum
             req.b = 5
             print(f"\nCalling RPC: a={req.a}, b={req.b}")
-            res = await protocol_client.call(req)
+            res = protocol_client.call_nowait(req)
             if res:
                 print(f"Response received: sum={res.sum}")
             else:

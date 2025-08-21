@@ -139,6 +139,23 @@ class IPduServiceManager(PduManager, ABC):
         """
         pass
 
+    # --- サーバーイベント種別判定 ---
+
+    @abstractmethod
+    def is_server_event_request_in(self, event: Event) -> bool:
+        """サーバー：リクエスト受信イベントか"""
+        pass
+
+    @abstractmethod
+    def is_server_event_cancel(self, event: Event) -> bool:
+        """サーバー：キャンセル要求イベントか"""
+        pass
+
+    @abstractmethod
+    def is_server_event_none(self, event: Event) -> bool:
+        """サーバー：イベントが発生しなかったか"""
+        pass
+
     # --- クライアント側操作 ---
 
     @abstractmethod
@@ -160,7 +177,7 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     @abstractmethod
-    def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
+    async def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
         """
         サービスにリクエストPDUを送信する。
 
@@ -168,6 +185,21 @@ class IPduServiceManager(PduManager, ABC):
             client_id: 登録時に取得したクライアントID。
             pdu_data: 送信するリクエストPDUデータ。
             timeout_msec: タイムアウト（ミリ秒）。
+        """
+        pass
+
+    @abstractmethod
+    def call_request_nowait(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
+        """
+        サービスにリクエストPDUを送信する（非同期）。
+
+        Args:
+            client_id: 登録時に取得したクライアントID。
+            pdu_data: 送信するリクエストPDUデータ。
+            timeout_msec: タイムアウト（ミリ秒）。
+
+        Returns:
+            成功した場合はTrue、失敗した場合はFalse。
         """
         pass
 
@@ -209,21 +241,8 @@ class IPduServiceManager(PduManager, ABC):
         """
         pass
 
-    # --- サーバーイベント種別判定 ---
-
     @abstractmethod
-    def is_server_event_request_in(self, event: Event) -> bool:
-        """サーバー：リクエスト受信イベントか"""
-        pass
-
-    @abstractmethod
-    def is_server_event_cancel(self, event: Event) -> bool:
-        """サーバー：キャンセル要求イベントか"""
-        pass
-
-    @abstractmethod
-    def is_server_event_none(self, event: Event) -> bool:
-        """サーバー：イベントが発生しなかったか"""
+    def cancel_request_nowait(self, client_id: ClientId) -> bool:
         pass
 
     # --- クライアントイベント種別判定 ---

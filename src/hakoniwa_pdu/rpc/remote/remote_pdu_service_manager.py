@@ -6,7 +6,14 @@ from hakoniwa_pdu.pdu_manager import PduManager
 from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
 from hakoniwa_pdu.rpc.service_config import ServiceConfig
 from hakoniwa_pdu.impl.hako_binary import offset_map
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceRequestHeader import ServiceRequestHeader
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceRequestHeader import (
+    pdu_to_py_ServiceRequestHeader,
+    py_to_pdu_ServiceRequestHeader
+)
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceResponseHeader import ServiceResponseHeader
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_RegisterClientRequestPacket import RegisterClientRequestPacket
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_RegisterClientResponse import RegisterClientResponse
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_RegisterClientResponsePacket import RegisterClientResponsePacket
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_RegisterClientRequestPacket import (
     pdu_to_py_RegisterClientRequestPacket,
@@ -57,11 +64,15 @@ class RemotePduServiceManager(IPduServiceManager):
         self.current_server_client_info: Dict[str, Any] = {}
 
 
+        self.client_request_id = 0
+
 
 
     # --- クライアント側操作 ---
 
     async def register_client(self, service_name: str, client_name: str, timeout: float = 1.0) -> Optional[ClientId]:
+        self.service_name = service_name
+        self.client_name = client_name
         offmap = offset_map.create_offmap(self.offset_path)
         self.service_config = ServiceConfig(self.service_config_path, offmap, hakopy=None)
 
@@ -103,3 +114,78 @@ class RemotePduServiceManager(IPduServiceManager):
 
     def register_client_nowait(self, service_name: str, client_name: str) -> Optional[ClientId]:
         raise NotImplementedError("register_client_nowait is not implemented")
+
+
+    async def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
+        # pdu_dataは、パケット形式になっているので、buildしてラップすればOK。
+        client_info: RegisterClientResponse = ClientId
+        raw_data = self._build_binary(PDU_DATA_RPC_REQUEST, self.service_name, client_info.request_channel_id, pdu_data)
+        if not await self.comm_service.send_binary(raw_data):
+            return False
+        return True
+
+    def call_request_nowait(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
+        raise NotImplementedError("call_request_nowait is not implemented")
+
+
+    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int) -> bytes:
+        header = ServiceRequestHeader()
+        header.request_id = self.client_request_id
+        header.service_name = self.service_name
+        header.client_name = self.client_name
+        header.opcode = opcode
+        header.status_poll_interval_msec = poll_interval_msec
+        pdu_data = py_to_pdu_ServiceRequestHeader(header)
+        return pdu_data
+
+
+    def poll_response(self, client_id: ClientId) -> Event:
+        """
+        クライアント側でサーバーからのイベント（レスポンス受信、タイムアウトなど）をポーリングする。
+
+        Args:
+            client_id: 登録時に取得したクライアントID。
+
+        Returns:
+            発生したイベントを示すオブジェクト。
+        """
+        pass
+
+    def get_response(self, client_id: ClientId) -> PduData:
+        """
+        受信したレスポンスPDUデータを取得する。
+        poll_response()でレスポンス受信イベントを確認した後に呼び出す。
+
+        Args:
+            client_id: 登録時に取得したクライアントID。
+        """
+        pass
+
+    def cancel_request(self, client_id: ClientId) -> bool:
+        """
+        送信済みのリクエストのキャンセルを要求する。
+
+        Args:
+            client_id: 登録時に取得したクライアントID。
+        """
+        pass
+
+
+
+    # --- クライアントイベント種別判定 ---
+
+    def is_client_event_response_in(self, event: Event) -> bool:
+        """クライアント：レスポンス受信イベントか"""
+        pass
+
+    def is_client_event_timeout(self, event: Event) -> bool:
+        """クライアント：タイムアウトイベントか"""
+        pass
+
+    def is_client_event_cancel_done(self, event: Event) -> bool:
+        """クライアント：キャンセル完了イベントか"""
+        pass
+
+    def is_client_event_none(self, event: Event) -> bool:
+        """クライアント：イベントが発生しなかったか"""
+        pass
