@@ -256,7 +256,7 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     @abstractmethod
-    def cancel_request(self, client_id: ClientId) -> bool:
+    async def cancel_request(self, client_id: ClientId) -> bool:
         """
         送信済みのリクエストのキャンセルを要求する。
 

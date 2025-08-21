@@ -160,7 +160,21 @@ class ProtocolClient:
         if self.client_id is None:
             raise RuntimeError("Client is not registered.")
         
-        return self.pdu_manager.cancel_request(self.client_id)
+        if not await self.pdu_manager.cancel_request(self.client_id):
+            raise Exception("Failed to cancel request.")
+        _, _ = self._wait_response()
+        return True
 
     def cancel_nowait(self) -> bool:
-        raise NotImplementedError("cancel_nowait is not implemented in this ProtocolClient class.")
+        """
+        送信済みのリクエストのキャンセルを試みる。
+        """
+        if self.client_id is None:
+            raise RuntimeError("Client is not registered.")
+
+        if not self.pdu_manager.cancel_request_nowait(self.client_id):
+            raise Exception("Failed to cancel request.")
+        _, _ = self._wait_response()
+        return True
+
+
