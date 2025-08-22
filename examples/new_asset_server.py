@@ -74,7 +74,7 @@ def my_on_manual_timing_control(context):
     print("Server is running. Waiting for requests...")
     try:
         # サーバーのイベントループを開始
-        asyncio.run(protocol_server.serve(add_two_ints_handler))
+        protocol_server.serve_nowait(add_two_ints_handler)
     except KeyboardInterrupt:
         print("\nServer stopped by user.")
     finally:
