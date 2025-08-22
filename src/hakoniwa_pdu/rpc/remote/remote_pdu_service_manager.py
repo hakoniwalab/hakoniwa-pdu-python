@@ -74,9 +74,11 @@ class RemotePduServiceManager(IPduServiceManager):
         self._server_instance_client_handles: Dict[ClientId, Any] = {}  # client_id -> hakopy handle
         self._server_instance_current_server_client_info: Dict[str, Any] = {}
         self._server_instance_service_name: Optional[str] = None
+        self._server_instance_client_name: Optional[str] = None
         self._server_instance_service_config_path: Optional[str] = None
         self._server_instance_delta_time_usec: Optional[int] = None
         self._server_instance_delta_time_sec: Optional[float] = None
+        self._server_instance_request_id = 0
 
         # Client
         self._client_instance_request_id = 0
@@ -171,30 +173,36 @@ class RemotePduServiceManager(IPduServiceManager):
         return True
 
     def get_response_buffer(self, client_id: ClientId, status: int, result_code: int) -> Optional[PduData]:
-        """
-        指定されたクライアントのレスポンスバッファを取得する。
-
-        Args:
-            client_id: クライアントID。
-            status: ステータスコード。
-            result_code: 結果コード。
-
-        Returns:
-            レスポンスPDUデータ。取得できなかった場合はNone。
-        """
-        pass
+        py_pdu_data = self.cls_res_packet()
+        py_pdu_data.header.request_id = self._server_instance_request_id
+        py_pdu_data.header.service_name = self._server_instance_service_name
+        py_pdu_data.header.client_name = self._server_instance_client_name
+        py_pdu_data.header.status = status
+        py_pdu_data.header.processing_percentage = 100
+        py_pdu_data.header.result_code = result_code
+        pdu_data = self.res_encoder(py_pdu_data)
+        return pdu_data
 
     def poll_request_nowait(self) -> Event:
         raise NotImplementedError("poll_request_nowait is not implemented")
 
     async def poll_request(self) -> Event:
-        """
-        サーバー側でクライアントからのイベント（リクエスト受信、キャンセル要求など）をポーリングする。
-
-        Returns:
-            発生したイベントを示すオブジェクト。
-        """
-        pass
+        if self._server_instance_client_name is not None:
+            #複数のクライアントの同時リクエストはサポートしない
+            return self.SERVER_API_EVENT_NONE
+        self.sleep(self._server_instance_delta_time_sec)
+        #クライアントレジストリを探索して、バッファチェックする
+        for registry in self._server_instance_client_registries[self._server_instance_service_name].items():
+            for client_name, client_handle in registry.items():
+                if self.comm_buffer.contains_buffer(self._server_instance_service_name, client_name):
+                    raw_data = self.comm_buffer.peek_buffer(self._server_instance_service_name, client_name)
+                    request = self.req_decoder(raw_data)
+                    self._server_instance_client_name = client_name
+                    self._server_instance_request_id = request.header.request_id
+                    if request.header.opcode == self.CLIENT_API_OPCODE_CANCEL:
+                        return self.SERVER_API_EVENT_REQUEST_CANCEL
+                    return self.SERVER_API_EVENT_REQUEST_IN
+        return self.SERVER_API_EVENT_NONE
 
     def get_request(self) -> Tuple[ClientId, PduData]:
         """
