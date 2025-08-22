@@ -122,12 +122,19 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     @abstractmethod
-    def poll_request(self) -> Event:
+    async def poll_request(self) -> Event:
         """
         サーバー側でクライアントからのイベント（リクエスト受信、キャンセル要求など）をポーリングする。
 
         Returns:
             発生したイベントを示すオブジェクト。
+        """
+        pass
+
+    @abstractmethod
+    def poll_request_nowait(self) -> Event:
+        """
+        サーバー側でクライアントからのイベントをポーリングする（nowait版）。
         """
         pass
 
@@ -143,7 +150,7 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     @abstractmethod
-    def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    async def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
         """
         指定されたクライアントに正常応答PDUを送信する。
 
@@ -154,9 +161,31 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     @abstractmethod
-    def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    def put_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        """
+        指定されたクライアントに正常応答PDUを送信する（nowait版）。
+
+        Args:
+            client_id: 送信先クライアントのID。
+            pdu_data: 送信するレスポンスPDUデータ。
+        """
+        pass
+
+    @abstractmethod
+    async def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
         """
         指定されたクライアントにキャンセル応答PDUを送信する。
+
+        Args:
+            client_id: 送信先クライアントのID。
+            pdu_data: 送信するレスポンスPDUデータ。
+        """
+        pass
+
+    @abstractmethod
+    def put_cancel_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        """
+        指定されたクライアントにキャンセル応答PDUを送信する（nowait版）。
 
         Args:
             client_id: 送信先クライアントのID。

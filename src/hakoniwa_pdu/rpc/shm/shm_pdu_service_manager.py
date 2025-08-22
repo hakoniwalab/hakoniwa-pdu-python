@@ -67,7 +67,10 @@ class ShmPduServiceManager(IPduServiceManager):
         time.sleep(time_sec)
         return 0
 
-    def poll_request(self) -> Event:
+    async def poll_request(self) -> Event:
+        raise NotImplementedError("ShmPduServiceManager does not support async poll_request. Use poll_request_nowait instead.")
+
+    def poll_request_nowait(self) -> Event:
         # 複数のサービスを管理する場合、どのサービスをポーリングするかの指定が必要だが、
         # ここでは最初に作られたサービスを対象とする簡易的な実装とする。
         if not self.service_id_map:
@@ -120,14 +123,20 @@ class ShmPduServiceManager(IPduServiceManager):
             raise Exception("Failed to get request byte array")
         return byte_array
 
-    def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    async def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        raise NotImplementedError("ShmPduServiceManager does not support async put_response. Use put_response_nowait instead.")
+
+    def put_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
         service_id = self.current_server_client_info.get('service_id')
         #print(f"Putting response for client {client_id} on service {service_id}")
         return hakopy.asset_service_server_put_response(service_id, pdu_data)
 
-    def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    async def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        raise NotImplementedError("ShmPduServiceManager does not support async put_cancel_response. Use put_cancel_response_nowait instead.")
+
+    def put_cancel_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
         # 現状の実装ではput_responseと同じだが、エンコーダ側でヘッダのresult_codeを変える想定
-        return self.put_response(client_id, pdu_data)
+        return self.put_response_nowait(client_id, pdu_data)
 
     # --- クライアント側操作 ---
 

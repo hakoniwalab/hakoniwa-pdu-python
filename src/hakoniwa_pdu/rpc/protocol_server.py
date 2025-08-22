@@ -48,7 +48,7 @@ class ProtocolServer:
         self._is_serving = True
         print("Server protocol started...")
         while self._is_serving:
-            event = self.pdu_manager.poll_request()
+            event = self.pdu_manager.poll_request_nowait()
 
             if self.pdu_manager.is_server_event_request_in(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
@@ -66,7 +66,7 @@ class ProtocolServer:
                     res_pdu_data = self.res_encoder(r)
 
                     # レスポンスを送信
-                    self.pdu_manager.put_response(client_id, res_pdu_data)
+                    self.pdu_manager.put_response_nowait(client_id, res_pdu_data)
                     print(f"Response sent to client {client_id}")
                 except Exception as e:
                     print(f"Error processing request from client {client_id}: {e}")
@@ -79,7 +79,7 @@ class ProtocolServer:
                     response_data = await cancel_handler(request_data)
                     res_pdu_data = self.res_encoder(response_data)
 
-                    self.pdu_manager.put_cancel_response(client_id, res_pdu_data)
+                    self.pdu_manager.put_cancel_response_nowait(client_id, res_pdu_data)
                     print(f"Cancel response sent to client {client_id}")
                 except Exception as e:
                     print(f"Error processing cancel request from client {client_id}: {e}")
