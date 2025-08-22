@@ -175,6 +175,17 @@ class RemotePduServiceManager(IPduServiceManager):
     def cancel_request_nowait(self, client_id: ClientId) -> bool:
         raise NotImplementedError("cancel_request_nowait is not implemented")
 
+    # --- サーバーイベント種別判定 ---
+
+    def is_server_event_request_in(self, event: Event) -> bool:
+        return event == self.SERVER_API_EVENT_REQUEST_IN
+
+    def is_server_event_cancel(self, event: Event) -> bool:
+        return event == self.SERVER_API_EVENT_REQUEST_CANCEL
+
+    def is_server_event_none(self, event: Event) -> bool:
+        return event == self.SERVER_API_EVENT_NONE
+
 
     # --- クライアントイベント種別判定 ---
 

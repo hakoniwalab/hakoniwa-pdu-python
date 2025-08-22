@@ -26,7 +26,7 @@ class IPduServiceManager(PduManager, ABC):
         self.req_encoder = req_encoder
         self.req_decoder = req_decoder
 
-    def register_res_serializer(self, res_encoder: Callable, res_decoder: Callable) -> None:
+    def register_res_serializer(self, cls_res_packet: Type[Any], res_encoder: Callable, res_decoder: Callable) -> None:
         """
         クライアントのレスポンスPDUをエンコード/デコードする関数を登録する。
 
@@ -34,6 +34,7 @@ class IPduServiceManager(PduManager, ABC):
             res_encoder: レスポンスPDUをエンコードする関数 (dict -> bytes)。
             res_decoder: レスポンスPDUをデコードする関数 (bytes -> dict)。
         """
+        self.cls_res_packet = cls_res_packet
         self.res_encoder = res_encoder
         self.res_decoder = res_decoder
 

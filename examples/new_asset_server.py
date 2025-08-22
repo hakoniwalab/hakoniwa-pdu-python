@@ -12,6 +12,8 @@ from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
 # PDUの型定義とエンコーダ/デコーダをインポート
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponse import AddTwoIntsResponse
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequestPacket import AddTwoIntsRequestPacket
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket import AddTwoIntsResponsePacket
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import py_to_pdu_AddTwoIntsRequestPacket, pdu_to_py_AddTwoIntsRequestPacket
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import py_to_pdu_AddTwoIntsResponsePacket, pdu_to_py_AddTwoIntsResponsePacket
 
@@ -49,7 +51,10 @@ def my_on_initialize(context):
         service_name=SERVICE_NAME,
         max_clients=1,
         pdu_manager=pdu_manager,
-        req_decoder=pdu_to_py_AddTwoIntsRequestPacket, # リクエストのデコーダ
+        cls_req_packet=AddTwoIntsRequestPacket,  # リクエストPDUの型
+        req_encoder=py_to_pdu_AddTwoIntsRequestPacket,  # リクエストのエンコーダ
+        req_decoder=pdu_to_py_AddTwoIntsRequestPacket,  # リクエストのデコーダ
+        cls_res_packet=AddTwoIntsResponsePacket,  # レスポンスPDUの型
         res_encoder=py_to_pdu_AddTwoIntsResponsePacket,  # レスポンスのエンコーダ
         res_decoder=pdu_to_py_AddTwoIntsResponsePacket  # レスポンスのデコーダ
     )

@@ -6,7 +6,7 @@ class ProtocolClient:
     """
     IPduServiceManagerを介してクライアントのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, pdu_manager: IPduServiceManager, service_name: str, client_name: str, cls_req_packet: Type[Any], req_encoder: Callable, req_decoder: Callable, res_encoder: Callable, res_decoder: Callable):
+    def __init__(self, pdu_manager: IPduServiceManager, service_name: str, client_name: str, cls_req_packet: Type[Any], req_encoder: Callable, req_decoder: Callable, cls_res_packet: Type[Any], res_encoder: Callable, res_decoder: Callable):
         """
         クライアントプロトコルハンドラを初期化する。
 
@@ -24,11 +24,12 @@ class ProtocolClient:
         self.cls_req_packet = cls_req_packet
         self.req_encoder = req_encoder
         self.req_decoder = req_decoder
+        self.cls_res_packet = cls_res_packet
         self.res_encoder = res_encoder
         self.res_decoder = res_decoder
         self.client_id: ClientId = None
         self.pdu_manager.register_req_serializer(cls_req_packet, req_encoder, req_decoder)
-        self.pdu_manager.register_res_serializer(res_encoder, res_decoder)
+        self.pdu_manager.register_res_serializer(cls_res_packet, res_encoder, res_decoder)
 
     def register_nowait(self) -> bool:
         """

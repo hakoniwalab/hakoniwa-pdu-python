@@ -1,5 +1,5 @@
 import asyncio
-from typing import Callable, Awaitable, Any
+from typing import Callable, Awaitable, Any, Type
 from .ipdu_service_manager import IPduServiceManager
 
 # リクエストハンドラの型定義: async def handler(request) -> response
@@ -9,7 +9,7 @@ class ProtocolServer:
     """
     IPduServiceManagerを介してサーバーのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, service_name: str, max_clients: int, pdu_manager: IPduServiceManager, req_decoder: Callable, res_encoder: Callable, res_decoder: Callable):
+    def __init__(self, service_name: str, max_clients: int, pdu_manager: IPduServiceManager, cls_req_packet: Type[Any], req_encoder: Callable, req_decoder: Callable, cls_res_packet: Type[Any], res_encoder: Callable, res_decoder: Callable):
         """
         サーバープロトコルハンドラを初期化する。
 
@@ -23,10 +23,15 @@ class ProtocolServer:
         self.service_name = service_name
         self.max_clients = max_clients
         self.pdu_manager = pdu_manager
+        self.cls_req_packet = cls_req_packet
+        self.cls_res_packet = cls_res_packet
+        self.req_encoder = req_encoder
         self.req_decoder = req_decoder
         self.res_encoder = res_encoder
         self.res_decoder = res_decoder
         self._is_serving = False
+        self.pdu_manager.register_req_serializer(cls_req_packet, req_encoder, req_decoder)
+        self.pdu_manager.register_res_serializer(cls_res_packet, res_encoder, res_decoder)
     
     def start_service(self) -> bool:
         return self.pdu_manager.start_service(self.service_name, max_clients=self.max_clients)
