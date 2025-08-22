@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any, Tuple, Optional, Dict
 import asyncio
 import time
@@ -31,6 +32,19 @@ from hakoniwa_pdu.impl.data_packet import (
     PDU_DATA_RPC_REQUEST,
     PDU_DATA_RPC_REPLY
 )
+@dataclass
+class ClientHandle:
+    """
+    クライアントハンドルのデータ構造。
+    クライアントIDとリクエストチャネルID、レスポンスチャネルIDを保持する。
+    """
+    client_id: int
+    request_channel_id: int
+    response_channel_id: int
+
+class ClientRegistry:
+    def __init__(self):
+        self.clients: Dict[str, ClientHandle] = {}  # client_name -> ClientHandle
 
 class RemotePduServiceManager(IPduServiceManager):
     """
@@ -38,7 +52,7 @@ class RemotePduServiceManager(IPduServiceManager):
     """
 
 
-    def __init__(self, asset_name: str, pdu_config_path: str, offset_path: str, comm_service: ICommunicationService):
+    def __init__(self, asset_name: str, pdu_config_path: str, offset_path: str, comm_service: ICommunicationService, uri: str):
         """
         ShmPduServiceManagerを初期化する（第1段階：安全な初期化）。
 
@@ -50,8 +64,11 @@ class RemotePduServiceManager(IPduServiceManager):
         super().__init__()
         self.asset_name = asset_name
         self.offset_path = offset_path
+        self.uri = uri
+        self.client_registries: Dict[str, ClientRegistry] = {}  # service_name -> ClientRegistry
 
         # PduManagerの基本的な初期化
+        comm_service.register_event_handler(self.handler)
         self.initialize(config_path=pdu_config_path, comm_service=comm_service)
         self.start_service()
 
@@ -64,26 +81,82 @@ class RemotePduServiceManager(IPduServiceManager):
 
         self.client_request_id = 0
 
+    async def _handler_register_client(self, packet: DataPacket) -> None:
+        body_raw_data = packet.body_data
+        body_pdu_data = pdu_to_py_RegisterClientRequestPacket(body_raw_data)
+        service_id = self.service_config.get_service_index(body_pdu_data.header.service_name)
+        if self.client_registries.get(body_pdu_data.header.service_name) is None:
+            self.client_registries[body_pdu_data.header.service_name] = ClientRegistry()
+        if self.client_registries.get(body_pdu_data.header.service_name).clients.get(body_pdu_data.header.client_name) is not None:
+            raise ValueError(f"Client registry for service '{body_pdu_data.header.service_name}' already exists")
+
+        # RPCクライアント登録
+        client_handle = ClientHandle()
+        client_handle.client_id = len(self.client_registries[body_pdu_data.header.service_name].clients)
+        client_handle.request_channel_id = (client_handle.client_id * 2)
+        client_handle.response_channel_id = (client_handle.client_id * 2) + 1
+        self.client_registries[body_pdu_data.header.service_name].clients[body_pdu_data.header.client_name] = client_handle
+
+        # 応答パケット作成
+        register_client_res_packet: RegisterClientResponsePacket = RegisterClientResponsePacket()
+        register_client_res_packet.header.request_id = 0
+        register_client_res_packet.header.service_name = body_pdu_data.header.service_name
+        register_client_res_packet.header.client_name = body_pdu_data.header.client_name
+        register_client_res_packet.header.result_code = self.API_RESULT_CODE_OK
+        register_client_res_packet.body.client_id = client_handle.client_id
+        register_client_res_packet.body.service_id = service_id
+        register_client_res_packet.body.request_channel_id = client_handle.request_channel_id
+        register_client_res_packet.body.response_channel_id = client_handle.response_channel_id
+
+        # 応答送信
+        pdu_data = py_to_pdu_RegisterClientResponsePacket(register_client_res_packet)
+        raw_data = self._build_binary(PDU_DATA_RPC_REPLY, body_pdu_data.header.service_name, client_handle.response_channel_id, pdu_data)
+        if not await self.comm_service.send_binary(raw_data):
+            raise RuntimeError("Failed to send register client response")
+        return None
+    
+    async def handler(self, packet: DataPacket) -> None:
+        """
+        ハンドラ関数。受信したパケットを処理する。
+        """
+        if packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_READ:
+            # 読み取り用のPDU宣言
+            print(f"Declare PDU for read: {packet.robot_name}, channel_id={packet.channel_id}")
+            #TODO
+        elif packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_WRITE:
+            # 書き込み用のPDU宣言
+            print(f"Declare PDU for write: {packet.robot_name}, channel_id={packet.channel_id}")
+            #TODO
+        elif packet.meta_pdu.meta_request_type == REGISTER_RPC_CLIENT:
+            # RPCクライアント登録
+            print(f"Register RPC client: {packet.robot_name}, channel_id={packet.channel_id}")
+            await self._handler_register_client(packet)
+        else:
+            raise NotImplementedError("Unknown packet type")
 
     # --- サーバー側操作 ---
     def initialize_services(self, service_config_path: str, delta_time_usec: int) -> int:
-        pass
+        self.service_config_path = service_config_path
+        self.delta_time_usec = delta_time_usec
+        self.delta_time_sec: float = delta_time_usec / 1_000_000.0
 
-    def start_service(self, service_name: str, max_clients: int) -> bool:
-        """
-        サーバーとしてサービスを開始する。
+    def start_rpc_service_nowait(self, service_name: str, max_clients: int) -> bool:
+        raise NotImplementedError("start_rpc_service_nowait is not implemented")
 
-        Args:
-            service_name: 公開するサービス名。
-            max_clients: 最大クライアント数。
+    async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
+        offmap = offset_map.create_offmap(self.offset_path)
+        self.service_config = ServiceConfig(self.service_config_path, offmap, hakopy=None)
 
-        Returns:
-            成功した場合はTrue。
-        """
-        pass
+        # サービス用のPDU定義を既存の定義に追記
+        pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
+        self.pdu_config.update_pdudef(pdudef)
+        print("Service PDU definitions prepared.")
+        self.service_name = service_name
+        return await super().start_service(uri=self.uri)
 
     def sleep(self, time_sec: float) -> bool:
-        pass
+        time.sleep(time_sec)
+        return True
 
     def get_response_buffer(self, client_id: ClientId, status: int, result_code: int) -> Optional[PduData]:
         """
@@ -99,7 +172,10 @@ class RemotePduServiceManager(IPduServiceManager):
         """
         pass
 
-    def poll_request(self) -> Event:
+    def poll_request_nowait(self) -> Event:
+        raise NotImplementedError("poll_request_nowait is not implemented")
+
+    async def poll_request(self) -> Event:
         """
         サーバー側でクライアントからのイベント（リクエスト受信、キャンセル要求など）をポーリングする。
 
@@ -118,7 +194,10 @@ class RemotePduServiceManager(IPduServiceManager):
         """
         pass
 
-    def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    async def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        raise NotImplementedError("put_response is not implemented")
+
+    def put_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
         """
         指定されたクライアントに正常応答PDUを送信する。
 
@@ -128,7 +207,10 @@ class RemotePduServiceManager(IPduServiceManager):
         """
         pass
 
-    def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    async def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        raise NotImplementedError("put_cancel_response is not implemented")
+
+    def put_cancel_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
         """
         指定されたクライアントにキャンセル応答PDUを送信する。
 

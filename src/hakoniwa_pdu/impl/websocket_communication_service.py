@@ -146,7 +146,7 @@ class WebSocketCommunicationService(ICommunicationService):
                         header: ServiceResponseHeader = pdu_to_py_ServiceResponseHeader(packet.get_pdu_data())
                         self.comm_buffer.put_rpc_packet(header.service_name, header.client_name, packet.get_pdu_data())
                     elif packet and packet.meta_pdu.message_type in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_CLIENT] and self.handler:
-                        self.handler(packet)
+                        await self.handler(packet)
                     else:
                         raise ValueError(f"Unknown message type: {packet.meta_pdu.message_type if packet else 'None'}")
                 else:

@@ -59,7 +59,7 @@ def my_on_initialize(context):
         res_decoder=pdu_to_py_AddTwoIntsResponsePacket  # レスポンスのデコーダ
     )
     # サービスを開始
-    if not protocol_server.start_service():
+    if not protocol_server.start_service_nowait():
         print("Failed to start service.")
         return 1
 

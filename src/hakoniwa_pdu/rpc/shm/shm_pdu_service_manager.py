@@ -29,7 +29,6 @@ class ShmPduServiceManager(IPduServiceManager):
 
         # PduManagerの基本的な初期化
         self.initialize(config_path=pdu_config_path, comm_service=ShmCommunicationService())
-        self.start_service_nowait()
 
         # サービス関連のコンフィグはまだ初期化しない
         self.service_config: Optional[ServiceConfig] = None
@@ -45,8 +44,14 @@ class ShmPduServiceManager(IPduServiceManager):
         return hakopy.service_initialize(self.service_config_path)
 
     # --- サーバー側操作 ---
+    async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
+        raise NotImplementedError("ShmPduServiceManager does not support async start_service.")
 
-    def start_service(self, service_name: str, max_clients: int) -> bool:
+    def start_rpc_service_nowait(self, service_name: str, max_clients: int) -> bool:
+        print(f"Starting service '{service_name}' with max_clients={max_clients}...")
+        #PduManagerのstart_service_nowait()を呼び出す
+        super().start_service_nowait(uri="")
+
         offmap = offset_map.create_offmap(self.offset_path)
         self.service_config = ServiceConfig(self.service_config_path, offmap, hakopy=hakopy)
 

@@ -24,8 +24,11 @@ class ProtocolServer:
         self.pdu_manager.register_req_serializer(cls_req_packet, req_encoder, req_decoder)
         self.pdu_manager.register_res_serializer(cls_res_packet, res_encoder, res_decoder)
     
-    def start_service(self) -> bool:
-        return self.pdu_manager.start_service(self.service_name, max_clients=self.max_clients)
+    async def start_service(self) -> bool:
+        return await self.pdu_manager.start_rpc_service(self.service_name, max_clients=self.max_clients)
+    
+    def start_service_nowait(self) -> bool:
+        return self.pdu_manager.start_rpc_service_nowait(self.service_name, max_clients=self.max_clients)
 
     async def _handle_request(self, client_id: Any, req_pdu_data: bytes, handler: RequestHandler) -> bytes:
         """リクエスト処理の共通ロジック"""

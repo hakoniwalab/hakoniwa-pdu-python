@@ -44,7 +44,11 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     @abstractmethod
-    def start_service(self, service_name: str, max_clients: int) -> bool:
+    def start_rpc_service_nowait(self, service_name: str, max_clients: int) -> bool:
+        pass
+
+    @abstractmethod
+    async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
         """
         サーバーとしてサービスを開始する。
 

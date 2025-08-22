@@ -13,6 +13,12 @@ class ServiceConfig:
         if self.service_config is None:
             raise ValueError(f"Failed to load service config from {service_config_path}")
 
+    def get_service_index(self, service_name: str) -> int:
+        for idx, service in enumerate(self.service_config.get('services', [])):
+            if service.get('name') == service_name:
+                return idx
+        raise ValueError(f"Service '{service_name}' not found in service config")
+
     def append_pdu_def(self, pdudef: dict):
         new_def = self._get_pdu_definition()
 
