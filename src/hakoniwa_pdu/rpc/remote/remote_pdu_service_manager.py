@@ -65,7 +65,78 @@ class RemotePduServiceManager(IPduServiceManager):
         self.client_request_id = 0
 
 
+    # --- サーバー側操作 ---
+    def initialize_services(self, service_config_path: str, delta_time_usec: int) -> int:
+        pass
 
+    def start_service(self, service_name: str, max_clients: int) -> bool:
+        """
+        サーバーとしてサービスを開始する。
+
+        Args:
+            service_name: 公開するサービス名。
+            max_clients: 最大クライアント数。
+
+        Returns:
+            成功した場合はTrue。
+        """
+        pass
+
+    def sleep(self, time_sec: float) -> bool:
+        pass
+
+    def get_response_buffer(self, client_id: ClientId, status: int, result_code: int) -> Optional[PduData]:
+        """
+        指定されたクライアントのレスポンスバッファを取得する。
+
+        Args:
+            client_id: クライアントID。
+            status: ステータスコード。
+            result_code: 結果コード。
+
+        Returns:
+            レスポンスPDUデータ。取得できなかった場合はNone。
+        """
+        pass
+
+    def poll_request(self) -> Event:
+        """
+        サーバー側でクライアントからのイベント（リクエスト受信、キャンセル要求など）をポーリングする。
+
+        Returns:
+            発生したイベントを示すオブジェクト。
+        """
+        pass
+
+    def get_request(self) -> Tuple[ClientId, PduData]:
+        """
+        受信したリクエストデータを取得する。
+        poll_request()でリクエスト受信イベントを確認した後に呼び出す。
+
+        Returns:
+            (クライアントID, リクエストPDUデータ) のタプル。
+        """
+        pass
+
+    def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        """
+        指定されたクライアントに正常応答PDUを送信する。
+
+        Args:
+            client_id: 送信先クライアントのID。
+            pdu_data: 送信するレスポンスPDUデータ。
+        """
+        pass
+
+    def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        """
+        指定されたクライアントにキャンセル応答PDUを送信する。
+
+        Args:
+            client_id: 送信先クライアントのID。
+            pdu_data: 送信するレスポンスPDUデータ。
+        """
+        pass
     # --- クライアント側操作 ---
 
     async def register_client(self, service_name: str, client_name: str, timeout: float = 1.0) -> Optional[ClientId]:
