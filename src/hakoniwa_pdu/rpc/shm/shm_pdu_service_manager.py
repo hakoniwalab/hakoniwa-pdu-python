@@ -121,7 +121,8 @@ class ShmPduServiceManager(IPduServiceManager):
             raise Exception("Failed to get response byte array")
         return byte_array
     
-    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int) -> bytes:
+    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int, request_id: int) -> bytes:
+        # Note: request_id引数はI/F統一のために定義。shm実装ではCライブラリ側でIDが管理・設定されるため、この引数は利用しない。
         byte_array = hakopy.asset_service_client_get_request_buffer(
             self.client_handles[client_id], opcode, poll_interval_msec)
         if byte_array is None:  
@@ -231,3 +232,7 @@ class ShmPduServiceManager(IPduServiceManager):
 
     def is_client_event_none(self, event: Event) -> bool:
         return event == hakopy.HAKO_SERVICE_CLIENT_API_EVENT_NONE
+
+    @property
+    def requires_external_request_id(self) -> bool:
+        return False

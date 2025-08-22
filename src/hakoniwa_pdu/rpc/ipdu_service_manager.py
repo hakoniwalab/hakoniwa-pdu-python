@@ -262,7 +262,13 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
     @abstractmethod
-    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int) -> bytes:
+    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int, request_id: int) -> bytes:
+        """
+        クライアント側でリクエストPDUを構築するためのバッファ（雛形）を取得する。
+        pdu_managerの実装に依存して、必要なpduサイズ、オフセットを考慮した
+        バイナリが返却される。呼び出し元は、そのバイナリをデコードして、
+        必要なデータを設定し、再度エンコードして、call_request()を呼び出す。
+        """
         pass
 
     @abstractmethod
@@ -323,4 +329,10 @@ class IPduServiceManager(PduManager, ABC):
     @abstractmethod
     def is_client_event_none(self, event: Event) -> bool:
         """クライアント：イベントが発生しなかったか"""
+        pass
+
+    @property
+    @abstractmethod
+    def requires_external_request_id(self) -> bool:
+        """request_idを外部から設定する必要があるかを示すフラグ"""
         pass

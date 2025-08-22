@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Callable, Type
+
+from typing import Any, Callable, Type, Optional
 from .ipdu_service_manager import IPduServiceManager, ClientId
 
 class ProtocolClient:
@@ -27,7 +28,9 @@ class ProtocolClient:
         self.cls_res_packet = cls_res_packet
         self.res_encoder = res_encoder
         self.res_decoder = res_decoder
-        self.client_id: ClientId = None
+        self.client_id: Optional[ClientId] = None
+        self._client_instance_request_id_counter = 0
+        self._client_instance_last_request_id = -1
         self.pdu_manager.register_req_serializer(cls_req_packet, req_encoder, req_decoder)
         self.pdu_manager.register_res_serializer(cls_res_packet, res_encoder, res_decoder)
 
@@ -66,15 +69,31 @@ class ProtocolClient:
         if self.client_id is None:
             raise RuntimeError("Client is not registered. Call register() first.")
 
-        poll_interval_msec = int(poll_interval * 1000)  # 秒からミリ秒に変換
+        request_id_to_pass = -1 # デフォルト値
+        
+        # remoteの場合: ProtocolClientがIDを生成して渡す
+        if self.pdu_manager.requires_external_request_id:
+            current_request_id = self._client_instance_request_id_counter
+            self._client_instance_request_id_counter += 1
+            request_id_to_pass = current_request_id
+            # remoteの場合は、生成したIDを待つべきIDとして保存
+            self._client_instance_last_request_id = current_request_id
+
+        poll_interval_msec = int(poll_interval * 1000)
         byte_array = self.pdu_manager.get_request_buffer(
-            self.client_id, self.pdu_manager.CLIENT_API_OPCODE_REQUEST, poll_interval_msec)
+            self.client_id, self.pdu_manager.CLIENT_API_OPCODE_REQUEST, poll_interval_msec, request_id=request_id_to_pass)
+        
         if byte_array is None:
             raise Exception("Failed to get request byte array")
 
         req_packet = self.req_decoder(byte_array)
-        req_packet.body = request_data
 
+        # shmの場合: Cライブラリが設定したIDをバッファから読み取り、待つべきIDとして保存
+        if not self.pdu_manager.requires_external_request_id:
+            self._client_instance_last_request_id = req_packet.header.request_id
+        
+        # リクエストボディを設定してエンコード
+        req_packet.body = request_data
         req_pdu_data = self.req_encoder(req_packet)
         return req_pdu_data
 
@@ -86,8 +105,12 @@ class ProtocolClient:
             if self.pdu_manager.is_client_event_response_in(event):
                 print(f"Response received successfully.")
                 res_pdu_data = self.pdu_manager.get_response(self.service_name, self.client_id)
-                #print(f"Response PDU data: {res_pdu_data}")
                 response_data = self.res_decoder(res_pdu_data)
+                
+                if response_data.header.request_id != self._client_instance_last_request_id:
+                    print(f"Warning: Mismatched request_id. Expected {self._client_instance_last_request_id}, got {response_data.header.request_id}. Discarding.")
+                    continue
+
                 print(f"Decoded response data: {response_data}")
                 return False, response_data.body
             

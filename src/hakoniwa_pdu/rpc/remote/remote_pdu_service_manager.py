@@ -282,10 +282,10 @@ class RemotePduServiceManager(IPduServiceManager):
         raise NotImplementedError("call_request_nowait is not implemented")
 
 
-    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int) -> bytes:
+    def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int, request_id: int) -> bytes:
         self.client_poll_interval_msec = poll_interval_msec
         py_pdu_data = self.cls_req_packet()
-        py_pdu_data.header.request_id = self.client_request_id
+        py_pdu_data.header.request_id = request_id
         py_pdu_data.header.service_name = self.service_name
         py_pdu_data.header.client_name = self.client_name
         py_pdu_data.header.opcode = opcode
@@ -353,4 +353,8 @@ class RemotePduServiceManager(IPduServiceManager):
 
     def is_client_event_none(self, event: Event) -> bool:
         return event == self.CLIENT_API_EVENT_NONE
+    
+    @property
+    def requires_external_request_id(self) -> bool:
+        return True
     
