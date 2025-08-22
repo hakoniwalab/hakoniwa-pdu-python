@@ -62,40 +62,52 @@ class RemotePduServiceManager(IPduServiceManager):
             offset_path: オフセットファイルのディレクトリパス。
         """
         super().__init__()
+        # Common
         self.asset_name = asset_name
         self.offset_path = offset_path
         self.uri = uri
-        self.client_registries: Dict[str, ClientRegistry] = {}  # service_name -> ClientRegistry
+        self.service_config: Optional[ServiceConfig] = None
+
+        # Server
+        self._server_instance_client_registries: Dict[str, ClientRegistry] = {}  # service_name -> ClientRegistry
+        self._server_instance_service_id_map: Dict[int, str] = {}  # service_id -> service_name
+        self._server_instance_client_handles: Dict[ClientId, Any] = {}  # client_id -> hakopy handle
+        self._server_instance_current_server_client_info: Dict[str, Any] = {}
+        self._server_instance_service_name: Optional[str] = None
+        self._server_instance_service_config_path: Optional[str] = None
+        self._server_instance_delta_time_usec: Optional[int] = None
+        self._server_instance_delta_time_sec: Optional[float] = None
+
+        # Client
+        self._client_instance_request_id = 0
+        self._client_instance_service_name: Optional[str] = None
+        self._client_instance_client_name: Optional[str] = None
+        self._client_instance_timeout_msec: Optional[int] = None
+        self._client_instance_call_start_time_msec: Optional[int] = None
+        self._client_instance_request_buffer: Optional[bytes] = None
+        self._client_instance_poll_interval_msec: Optional[int] = None
 
         # PduManagerの基本的な初期化
         comm_service.register_event_handler(self.handler)
         self.initialize(config_path=pdu_config_path, comm_service=comm_service)
         self.start_service()
 
-        # サービス関連のコンフィグはまだ初期化しない
-        self.service_config: Optional[ServiceConfig] = None
-        self.service_id_map: Dict[int, str] = {}  # service_id -> service_name
-        self.client_handles: Dict[ClientId, Any] = {}  # client_id -> hakopy handle
-        self.current_server_client_info: Dict[str, Any] = {}
-
-
-        self.client_request_id = 0
 
     async def _handler_register_client(self, packet: DataPacket) -> None:
         body_raw_data = packet.body_data
         body_pdu_data = pdu_to_py_RegisterClientRequestPacket(body_raw_data)
         service_id = self.service_config.get_service_index(body_pdu_data.header.service_name)
-        if self.client_registries.get(body_pdu_data.header.service_name) is None:
-            self.client_registries[body_pdu_data.header.service_name] = ClientRegistry()
-        if self.client_registries.get(body_pdu_data.header.service_name).clients.get(body_pdu_data.header.client_name) is not None:
+        if self._server_instance_client_registries.get(body_pdu_data.header.service_name) is None:
+            self._server_instance_client_registries[body_pdu_data.header.service_name] = ClientRegistry()
+        if self._server_instance_client_registries.get(body_pdu_data.header.service_name).clients.get(body_pdu_data.header.client_name) is not None:
             raise ValueError(f"Client registry for service '{body_pdu_data.header.service_name}' already exists")
 
         # RPCクライアント登録
         client_handle = ClientHandle()
-        client_handle.client_id = len(self.client_registries[body_pdu_data.header.service_name].clients)
+        client_handle.client_id = len(self._server_instance_client_registries[body_pdu_data.header.service_name].clients)
         client_handle.request_channel_id = (client_handle.client_id * 2)
         client_handle.response_channel_id = (client_handle.client_id * 2) + 1
-        self.client_registries[body_pdu_data.header.service_name].clients[body_pdu_data.header.client_name] = client_handle
+        self._server_instance_client_registries[body_pdu_data.header.service_name].clients[body_pdu_data.header.client_name] = client_handle
 
         # 応答パケット作成
         register_client_res_packet: RegisterClientResponsePacket = RegisterClientResponsePacket()
@@ -136,22 +148,22 @@ class RemotePduServiceManager(IPduServiceManager):
 
     # --- サーバー側操作 ---
     def initialize_services(self, service_config_path: str, delta_time_usec: int) -> int:
-        self.service_config_path = service_config_path
-        self.delta_time_usec = delta_time_usec
-        self.delta_time_sec: float = delta_time_usec / 1_000_000.0
+        self._server_instance_service_config_path = service_config_path
+        self._server_instance_delta_time_usec = delta_time_usec
+        self._server_instance_delta_time_sec: float = delta_time_usec / 1_000_000.0
 
     def start_rpc_service_nowait(self, service_name: str, max_clients: int) -> bool:
         raise NotImplementedError("start_rpc_service_nowait is not implemented")
 
     async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
         offmap = offset_map.create_offmap(self.offset_path)
-        self.service_config = ServiceConfig(self.service_config_path, offmap, hakopy=None)
+        self.service_config = ServiceConfig(self._server_instance_service_config_path, offmap, hakopy=None)
 
         # サービス用のPDU定義を既存の定義に追記
         pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
         self.pdu_config.update_pdudef(pdudef)
         print("Service PDU definitions prepared.")
-        self.service_name = service_name
+        self._server_instance_service_name = service_name
         return await super().start_service(uri=self.uri)
 
     def sleep(self, time_sec: float) -> bool:
@@ -222,9 +234,10 @@ class RemotePduServiceManager(IPduServiceManager):
     # --- クライアント側操作 ---
 
     async def register_client(self, service_name: str, client_name: str, timeout: float = 1.0) -> Optional[ClientId]:
-        self.service_name = service_name
-        self.client_name = client_name
+        self._client_instance_service_name = service_name
+        self._client_instance_client_name = client_name
         offmap = offset_map.create_offmap(self.offset_path)
+        # TODO: service_config_path is not initialized for client
         self.service_config = ServiceConfig(self.service_config_path, offmap, hakopy=None)
 
         # サービス用のPDU定義を既存の定義に追記
@@ -269,13 +282,13 @@ class RemotePduServiceManager(IPduServiceManager):
 
     async def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
         # pdu_dataは、パケット形式になっているので、buildしてラップすればOK。
-        self.client_timeout_msec = timeout_msec
-        self.client_call_start_time_msec = int(time.time() * 1000)
+        self._client_instance_timeout_msec = timeout_msec
+        self._client_instance_call_start_time_msec = int(time.time() * 1000)
         client_info: RegisterClientResponse = client_id
-        raw_data = self._build_binary(PDU_DATA_RPC_REQUEST, self.service_name, client_info.request_channel_id, pdu_data)
+        raw_data = self._build_binary(PDU_DATA_RPC_REQUEST, self._client_instance_service_name, client_info.request_channel_id, pdu_data)
         if not await self.comm_service.send_binary(raw_data):
             return False
-        self.request_buffer = raw_data
+        self._client_instance_request_buffer = raw_data
         return True
 
     def call_request_nowait(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
@@ -283,11 +296,11 @@ class RemotePduServiceManager(IPduServiceManager):
 
 
     def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int, request_id: int) -> bytes:
-        self.client_poll_interval_msec = poll_interval_msec
+        self._client_instance_poll_interval_msec = poll_interval_msec
         py_pdu_data = self.cls_req_packet()
         py_pdu_data.header.request_id = request_id
-        py_pdu_data.header.service_name = self.service_name
-        py_pdu_data.header.client_name = self.client_name
+        py_pdu_data.header.service_name = self._client_instance_service_name
+        py_pdu_data.header.client_name = self._client_instance_client_name
         py_pdu_data.header.opcode = opcode
         py_pdu_data.header.status_poll_interval_msec = poll_interval_msec
         pdu_data = self.req_encoder(py_pdu_data)
@@ -295,34 +308,34 @@ class RemotePduServiceManager(IPduServiceManager):
 
 
     def poll_response(self, client_id: ClientId) -> Event:
-        self.sleep(self.client_poll_interval_msec / 1000.0)  # ミリ秒から秒に変換
-        if self.comm_buffer.contains_buffer(self.service_name, self.client_name):
-            raw_data = self.comm_buffer.peek_buffer(self.service_name, self.client_name)
+        self.sleep(self._client_instance_poll_interval_msec / 1000.0)  # ミリ秒から秒に変換
+        if self.comm_buffer.contains_buffer(self._client_instance_service_name, self._client_instance_client_name):
+            raw_data = self.comm_buffer.peek_buffer(self._client_instance_service_name, self._client_instance_client_name)
             response = self.res_decoder(raw_data)
             if response.header.result_code == IPduServiceManager.API_RESULT_CODE_CANCELED:
-                self.request_id = self.request_id + 1
+                self._client_instance_request_id = self._client_instance_request_id + 1
                 return self.CLIENT_API_EVENT_REQUEST_CANCEL_DONE
-            self.request_id = self.request_id + 1
+            self._client_instance_request_id = self._client_instance_request_id + 1
             return self.CLIENT_API_EVENT_RESPONSE_IN
         current_time_msec = int(time.time() * 1000)
-        if (current_time_msec - self.client_call_start_time_msec) > self.client_timeout_msec:
+        if (current_time_msec - self._client_instance_call_start_time_msec) > self._client_instance_timeout_msec:
             return self.CLIENT_API_EVENT_REQUEST_TIMEOUT
         return self.CLIENT_API_EVENT_NONE
 
     def get_response(self, client_id: ClientId) -> PduData:
-        if self.comm_buffer.contains_buffer(self.service_name, self.client_name):
-            raw_data = self.comm_buffer.get_buffer(self.service_name, self.client_name)
+        if self.comm_buffer.contains_buffer(self._client_instance_service_name, self._client_instance_client_name):
+            raw_data = self.comm_buffer.get_buffer(self._client_instance_service_name, self._client_instance_client_name)
             return raw_data
         raise RuntimeError("No response data available. Call poll_response() first.")
 
     async def cancel_request(self, client_id: ClientId) -> bool:
-        py_pdu_data = self.req_decoder(self.request_buffer)
+        py_pdu_data = self.req_decoder(self._client_instance_request_buffer)
         py_pdu_data.header.opcode = self.CLIENT_API_OPCODE_CANCEL
         py_pdu_data.header.poll_interval_msec = -1
         pdu_data = self.req_encoder(py_pdu_data)
         if not await self.comm_service.send_binary(pdu_data):
             return False
-        self.request_buffer = pdu_data
+        self._client_instance_request_buffer = pdu_data
         return True
 
     def cancel_request_nowait(self, client_id: ClientId) -> bool:
@@ -357,4 +370,3 @@ class RemotePduServiceManager(IPduServiceManager):
     @property
     def requires_external_request_id(self) -> bool:
         return True
-    
