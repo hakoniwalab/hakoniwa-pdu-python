@@ -8,7 +8,9 @@ import os
 from hakoniwa_pdu.impl.websocket_server_communication_service import (
     WebSocketServerCommunicationService,
 )
-from hakoniwa_pdu.rpc.remote.remote_pdu_service_manager import RemotePduServiceManager
+from hakoniwa_pdu.rpc.remote.remote_pdu_service_server_manager import (
+    RemotePduServiceServerManager,
+)
 from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
 
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
@@ -46,7 +48,7 @@ async def main() -> None:
 
     # WebSocketサーバ機能を持つコミュニケーションサービス
     comm = WebSocketServerCommunicationService(version="v2")
-    manager = RemotePduServiceManager(
+    manager = RemotePduServiceServerManager(
         asset_name=ASSET_NAME,
         pdu_config_path=args.pdu_config,
         offset_path=OFFSET_PATH,

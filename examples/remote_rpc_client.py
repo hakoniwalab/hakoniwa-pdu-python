@@ -6,7 +6,9 @@ import argparse
 import os
 
 from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
-from hakoniwa_pdu.rpc.remote.remote_pdu_service_manager import RemotePduServiceManager
+from hakoniwa_pdu.rpc.remote.remote_pdu_service_client_manager import (
+    RemotePduServiceClientManager,
+)
 from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
 
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
@@ -36,14 +38,14 @@ async def main() -> None:
     args = parser.parse_args()
 
     comm = WebSocketCommunicationService(version="v2")
-    manager = RemotePduServiceManager(
+    manager = RemotePduServiceClientManager(
         asset_name=ASSET_NAME,
         pdu_config_path=args.pdu_config,
         offset_path=OFFSET_PATH,
         comm_service=comm,
         uri=args.uri,
     )
-    manager.service_config_path = args.service_config
+    manager.initialize_services(args.service_config, DELTA_TIME_USEC)
 
     client = ProtocolClient(
         pdu_manager=manager,

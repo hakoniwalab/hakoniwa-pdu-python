@@ -2,14 +2,14 @@ import asyncio
 import time
 from typing import Callable, Awaitable, Any, Type, Union
 from .ipdu_service_manager import (
-    IPduServiceManagerImmediate,
-    IPduServiceManagerBlocking,
+    IPduServiceServerManagerImmediate,
+    IPduServiceServerManagerBlocking,
 )
 
 # リクエストハンドラの型定義: async def handler(request) -> response
 RequestHandler = Callable[[Any], Awaitable[Any]]
 
-PduManagerType = Union[IPduServiceManagerImmediate, IPduServiceManagerBlocking]
+PduManagerType = Union[IPduServiceServerManagerImmediate, IPduServiceServerManagerBlocking]
 
 
 class ProtocolServer:
