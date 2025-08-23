@@ -49,6 +49,18 @@ class ProtocolClientBase:
         if self.client_id is None:
             raise RuntimeError("Client is not registered. Call register() first.")
 
+        self.pdu_manager.register_req_serializer(
+            self.cls_req_packet, self.req_encoder, self.req_decoder
+        )
+        self.pdu_manager.register_res_serializer(
+            self.cls_res_packet, self.res_encoder, self.res_decoder
+        )
+        # Ensure the manager uses the correct service/client identifiers
+        if hasattr(self.pdu_manager, "service_name"):
+            self.pdu_manager.service_name = self.service_name
+        if hasattr(self.pdu_manager, "client_name"):
+            self.pdu_manager.client_name = self.client_name
+
         request_id_to_pass = -1
         if self.pdu_manager.requires_external_request_id:
             current_request_id = self._client_instance_request_id_counter

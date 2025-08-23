@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Callable
 import asyncio
 
 from .remote_pdu_service_base_manager import RemotePduServiceBaseManager
@@ -64,6 +64,7 @@ class RemotePduServiceServerManager(
         self.current_service_name: Optional[str] = None
         self.current_client_name: Optional[str] = None
         self.request_id = 0
+        self.req_decoders: Dict[str, Callable] = {}
         comm_service.register_event_handler(self.handler)
 
     async def _handler_register_client(self, packet: DataPacket) -> None:
@@ -168,7 +169,8 @@ class RemotePduServiceServerManager(
             for client_name, _handle in registry.clients.items():
                 if self.comm_buffer.contains_buffer(service_name, client_name):
                     raw_data = self.comm_buffer.peek_buffer(service_name, client_name)
-                    request = self.req_decoder(raw_data)
+                    decoder = self.req_decoders.get(service_name, self.req_decoder)
+                    request = decoder(raw_data)
                     self.current_client_name = client_name
                     self.current_service_name = service_name
                     self.request_id = request.header.request_id

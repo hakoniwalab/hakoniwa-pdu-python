@@ -81,6 +81,8 @@ class ProtocolServerBase:
             res_decoder,
             handler,
         )
+        if hasattr(self.pdu_manager, "req_decoders"):
+            self.pdu_manager.req_decoders[service_name] = req_decoder
 
     async def _handle_request(
         self, ctx: _ServiceContext, client_id: Any, req_pdu_data: bytes

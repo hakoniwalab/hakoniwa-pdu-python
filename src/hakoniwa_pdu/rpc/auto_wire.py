@@ -1,6 +1,6 @@
 """Utility helpers to construct ProtocolClient/Server with minimal imports."""
 from importlib import import_module
-from typing import Any, Tuple, Type, Callable, Optional
+from typing import Any, Tuple, Type, Callable, Optional, Sequence, Dict
 import asyncio
 
 
@@ -118,3 +118,102 @@ def make_protocol_server(*, pdu_manager: Any, service_name: str, srv: str, max_c
         res_encoder=res_encoder,
         res_decoder=res_decoder,
     )
+
+
+def make_protocol_clients(
+    *,
+    pdu_manager: Any,
+    services: Sequence[Dict[str, Any]],
+    pkg: str = "hakoniwa_pdu.pdu_msgs.hako_srv_msgs",
+    ProtocolClientClass: Optional[Type[Any]] = None,
+) -> Dict[str, Any]:
+    """Create multiple :class:`ProtocolClient` instances.
+
+    Parameters
+    ----------
+    pdu_manager: Any
+        Manager instance controlling PDU communication.
+    services: Sequence[Dict[str, Any]]
+        Iterable of service specifications.  Each specification must contain
+        ``service_name``, ``client_name`` and ``srv``.
+    pkg: str, optional
+        Package prefix where generated PDU modules exist.
+    ProtocolClientClass: Type, optional
+        Custom ``ProtocolClient`` class to instantiate.
+
+    Returns
+    -------
+    Dict[str, Any]
+        Mapping of service names to their corresponding ``ProtocolClient``
+        instances.
+    """
+    clients: Dict[str, Any] = {}
+    for spec in services:
+        service_name = spec["service_name"]
+        manager = spec.get("pdu_manager", pdu_manager)
+        clients[service_name] = make_protocol_client(
+            pdu_manager=manager,
+            service_name=service_name,
+            client_name=spec["client_name"],
+            srv=spec["srv"],
+            pkg=pkg,
+            ProtocolClientClass=ProtocolClientClass,
+        )
+    return clients
+
+
+def make_protocol_servers(
+    *,
+    pdu_manager: Any,
+    services: Sequence[Dict[str, Any]],
+    pkg: str = "hakoniwa_pdu.pdu_msgs.hako_srv_msgs",
+    ProtocolServerClass: Optional[Type[Any]] = None,
+) -> Any:
+    """Create a multi-service :class:`ProtocolServer` instance.
+
+    Parameters
+    ----------
+    pdu_manager: Any
+        Manager instance controlling PDU communication.
+    services: Sequence[Dict[str, Any]]
+        Iterable of service specifications.  Each specification must contain
+        ``service_name``, ``srv`` and ``max_clients``.
+    pkg: str, optional
+        Package prefix where generated PDU modules exist.
+    ProtocolServerClass: Type, optional
+        Custom ``ProtocolServer`` class to instantiate.
+
+    Returns
+    -------
+    Any
+        A ``ProtocolServer`` instance capable of handling all specified
+        services.
+    """
+    if not services:
+        raise ValueError("No services specified")
+
+    first = services[0]
+    server = make_protocol_server(
+        pdu_manager=pdu_manager,
+        service_name=first["service_name"],
+        srv=first["srv"],
+        max_clients=first["max_clients"],
+        pkg=pkg,
+        ProtocolServerClass=ProtocolServerClass,
+    )
+
+    for spec in services[1:]:
+        ReqPacket, ResPacket, req_encoder, req_decoder, res_encoder, res_decoder = _load_protocol_components(
+            spec["srv"], pkg
+        )
+        server.add_service(
+            spec["service_name"],
+            spec["max_clients"],
+            ReqPacket,
+            req_encoder,
+            req_decoder,
+            ResPacket,
+            res_encoder,
+            res_decoder,
+        )
+    return server
