@@ -13,13 +13,10 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket imp
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import pdu_to_py_AddTwoIntsRequestPacket, py_to_pdu_AddTwoIntsRequestPacket
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import pdu_to_py_AddTwoIntsResponsePacket, py_to_pdu_AddTwoIntsResponsePacket
 
-OFFSET_PATH = "/usr/local/hakoniwa/share/hakoniwa/offset"
+OFFSET_PATH = "./tests/config/offset"
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not os.path.exists(OFFSET_PATH), reason="offset files not present"
-)
 async def test_remote_rpc_call():
     # 1. Setup
     uri = "ws://localhost:8772"
