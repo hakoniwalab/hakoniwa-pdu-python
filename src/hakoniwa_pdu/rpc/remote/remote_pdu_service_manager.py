@@ -69,7 +69,7 @@ class RemotePduServiceManager(IPduServiceManager):
         self.service_config: Optional[ServiceConfig] = None
 
         # Server
-        self._server_instance_client_registries: Dict[str, ClientRegistry] = {}  # service_name -> ClientRegistry
+        self._server_instance_client_registry: Optional[ClientRegistry] = None
         self._server_instance_service_id_map: Dict[int, str] = {}  # service_id -> service_name
         self._server_instance_client_handles: Dict[ClientId, Any] = {}  # client_id -> hakopy handle
         self._server_instance_current_server_client_info: Dict[str, Any] = {}
@@ -99,17 +99,17 @@ class RemotePduServiceManager(IPduServiceManager):
         body_raw_data = packet.body_data
         body_pdu_data = pdu_to_py_RegisterClientRequestPacket(body_raw_data)
         service_id = self.service_config.get_service_index(body_pdu_data.header.service_name)
-        if self._server_instance_client_registries.get(body_pdu_data.header.service_name) is None:
-            self._server_instance_client_registries[body_pdu_data.header.service_name] = ClientRegistry()
-        if self._server_instance_client_registries.get(body_pdu_data.header.service_name).clients.get(body_pdu_data.header.client_name) is not None:
+        if self._server_instance_client_registry is None:
+            self._server_instance_client_registry = ClientRegistry()
+        if self._server_instance_client_registry.clients.get(body_pdu_data.header.client_name) is not None:
             raise ValueError(f"Client registry for service '{body_pdu_data.header.service_name}' already exists")
 
         # RPCクライアント登録
         client_handle = ClientHandle()
-        client_handle.client_id = len(self._server_instance_client_registries[body_pdu_data.header.service_name].clients)
+        client_handle.client_id = len(self._server_instance_client_registry.clients)
         client_handle.request_channel_id = (client_handle.client_id * 2)
         client_handle.response_channel_id = (client_handle.client_id * 2) + 1
-        self._server_instance_client_registries[body_pdu_data.header.service_name].clients[body_pdu_data.header.client_name] = client_handle
+        self._server_instance_client_registry.clients[body_pdu_data.header.client_name] = client_handle
 
         # 応答パケット作成
         register_client_res_packet: RegisterClientResponsePacket = RegisterClientResponsePacket()
@@ -190,55 +190,58 @@ class RemotePduServiceManager(IPduServiceManager):
         if self._server_instance_client_name is not None:
             #複数のクライアントの同時リクエストはサポートしない
             return self.SERVER_API_EVENT_NONE
-        self.sleep(self._server_instance_delta_time_sec)
+        await asyncio.sleep(self._server_instance_delta_time_sec)
         #クライアントレジストリを探索して、バッファチェックする
-        for registry in self._server_instance_client_registries[self._server_instance_service_name].items():
-            for client_name, client_handle in registry.items():
-                if self.comm_buffer.contains_buffer(self._server_instance_service_name, client_name):
-                    raw_data = self.comm_buffer.peek_buffer(self._server_instance_service_name, client_name)
-                    request = self.req_decoder(raw_data)
-                    self._server_instance_client_name = client_name
-                    self._server_instance_request_id = request.header.request_id
-                    if request.header.opcode == self.CLIENT_API_OPCODE_CANCEL:
-                        return self.SERVER_API_EVENT_REQUEST_CANCEL
-                    return self.SERVER_API_EVENT_REQUEST_IN
+        if self._server_instance_client_registry is None:
+            return self.SERVER_API_EVENT_NONE
+        for client_name, client_handle in self._server_instance_client_registry.clients.items():
+            if self.comm_buffer.contains_buffer(self._server_instance_service_name, client_name):
+                raw_data = self.comm_buffer.peek_buffer(self._server_instance_service_name, client_name)
+                request = self.req_decoder(raw_data)
+                self._server_instance_client_name = client_name
+                self._server_instance_request_id = request.header.request_id
+                if request.header.opcode == self.CLIENT_API_OPCODE_CANCEL:
+                    return self.SERVER_API_EVENT_REQUEST_CANCEL
+                return self.SERVER_API_EVENT_REQUEST_IN
         return self.SERVER_API_EVENT_NONE
 
     def get_request(self) -> Tuple[ClientId, PduData]:
-        """
-        受信したリクエストデータを取得する。
-        poll_request()でリクエスト受信イベントを確認した後に呼び出す。
-
-        Returns:
-            (クライアントID, リクエストPDUデータ) のタプル。
-        """
-        pass
+        if self.comm_buffer.contains_buffer(self._server_instance_service_name, self._server_instance_client_name):
+            raw_data = self.comm_buffer.get_buffer(self._server_instance_service_name, self._server_instance_client_name)
+            client_handle = self._server_instance_client_registry.clients[self._server_instance_client_name]
+            return client_handle, raw_data
+        raise RuntimeError("No response data available. Call poll_request() first.")
 
     async def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        raise NotImplementedError("put_response is not implemented")
-
-    def put_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        """
-        指定されたクライアントに正常応答PDUを送信する。
-
-        Args:
-            client_id: 送信先クライアントのID。
-            pdu_data: 送信するレスポンスPDUデータ。
-        """
-        pass
+        client_handle: ClientHandle = client_id
+        raw_data = self._build_binary(PDU_DATA_RPC_REPLY, self._server_instance_service_name, client_handle.request_channel_id, pdu_data)
+        if not await self.comm_service.send_binary(raw_data):
+            self._server_instance_client_name = None
+            self._server_instance_request_id = None
+            return False
+        self._server_instance_client_name = None
+        self._server_instance_request_id = None
+        return True
 
     async def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        raise NotImplementedError("put_cancel_response is not implemented")
+        client_handle: ClientHandle = client_id
+        cancel_pdu_data = self.get_response_buffer(None, self.API_STATUS_DONE, self.API_RESULT_CODE_CANCELED)
+        cancel_pdu_raw_data = self.res_encoder(cancel_pdu_data)
+        raw_data = self._build_binary(PDU_DATA_RPC_REPLY, self._server_instance_service_name, client_handle.request_channel_id, cancel_pdu_raw_data)
+        if not await self.comm_service.send_binary(raw_data):
+            self._server_instance_client_name = None
+            self._server_instance_request_id = None
+            return False
+        self._server_instance_client_name = None
+        self._server_instance_request_id = None
+        return True
+
+    def put_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
+        raise NotImplementedError("put_response_nowait is not implemented")
 
     def put_cancel_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        """
-        指定されたクライアントにキャンセル応答PDUを送信する。
+        raise NotImplementedError("put_cancel_response_nowait is not implemented")
 
-        Args:
-            client_id: 送信先クライアントのID。
-            pdu_data: 送信するレスポンスPDUデータ。
-        """
-        pass
     # --- クライアント側操作 ---
 
     async def register_client(self, service_name: str, client_name: str, timeout: float = 1.0) -> Optional[ClientId]:

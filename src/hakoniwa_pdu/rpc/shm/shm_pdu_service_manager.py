@@ -141,8 +141,8 @@ class ShmPduServiceManager(IPduServiceManager):
         raise NotImplementedError("ShmPduServiceManager does not support async put_cancel_response. Use put_cancel_response_nowait instead.")
 
     def put_cancel_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        # 現状の実装ではput_responseと同じだが、エンコーダ側でヘッダのresult_codeを変える想定
-        return self.put_response_nowait(client_id, pdu_data)
+        service_id = self.current_server_client_info.get('service_id')
+        return hakopy.asset_service_client_cancel_request(service_id, client_id)
 
     # --- クライアント側操作 ---
 

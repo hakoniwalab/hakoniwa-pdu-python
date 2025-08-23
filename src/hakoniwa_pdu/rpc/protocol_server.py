@@ -40,14 +40,7 @@ class ProtocolServer:
         res_pdu_data = self.res_encoder(r)
         return res_pdu_data
 
-    async def _handle_cancel(self, client_id: Any, req_pdu_data: bytes, cancel_handler: RequestHandler) -> bytes:
-        """キャンセル処理の共通ロジック"""
-        request_data = self.req_decoder(req_pdu_data)
-        response_data = await cancel_handler(request_data)
-        res_pdu_data = self.res_encoder(response_data)
-        return res_pdu_data
-
-    async def serve(self, handler: RequestHandler, cancel_handler: RequestHandler = None, poll_interval: float = 0.01):
+    async def serve(self, handler: RequestHandler, poll_interval: float = 0.01):
         """
         サーバーのメインイベントループを開始する (async版)。
         """
@@ -66,12 +59,11 @@ class ProtocolServer:
                 except Exception as e:
                     print(f"Error processing request from client {client_id}: {e}")
 
-            elif self.pdu_manager.is_server_event_cancel(event) and cancel_handler:
+            elif self.pdu_manager.is_server_event_cancel(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
                 print(f"Cancel request received from client {client_id}")
                 try:
-                    res_pdu_data = await self._handle_cancel(client_id, req_pdu_data, cancel_handler)
-                    await self.pdu_manager.put_cancel_response(client_id, res_pdu_data)
+                    await self.pdu_manager.put_cancel_response(client_id, None)
                     print(f"Cancel response sent to client {client_id}")
                 except Exception as e:
                     print(f"Error processing cancel request from client {client_id}: {e}")
@@ -82,7 +74,7 @@ class ProtocolServer:
             else:
                 print(f"Unhandled server event: {event}")
 
-    def serve_nowait(self, handler: RequestHandler, cancel_handler: RequestHandler = None, poll_interval: float = 0.01):
+    def serve_nowait(self, handler: RequestHandler, poll_interval: float = 0.01):
         """
         サーバーのメインイベントループを開始する (nowait版)。
         """
@@ -101,12 +93,11 @@ class ProtocolServer:
                 except Exception as e:
                     print(f"Error processing request from client {client_id}: {e}")
 
-            elif self.pdu_manager.is_server_event_cancel(event) and cancel_handler:
+            elif self.pdu_manager.is_server_event_cancel(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
                 print(f"Cancel request received from client {client_id}")
                 try:
-                    res_pdu_data = asyncio.run(self._handle_cancel(client_id, req_pdu_data, cancel_handler))
-                    self.pdu_manager.put_cancel_response_nowait(client_id, res_pdu_data)
+                    self.pdu_manager.put_cancel_response_nowait(client_id, None)
                     print(f"Cancel response sent to client {client_id}")
                 except Exception as e:
                     print(f"Error processing cancel request from client {client_id}: {e}")
