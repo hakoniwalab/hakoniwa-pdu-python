@@ -18,7 +18,7 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
 ASSET_NAME = "RemoteClient"
 CLIENT_NAME = "Client_1"
 SERVICE_NAME = "Service/Add"
-OFFSET_PATH = os.getenv("HAKO_BINARY_PATH", "/usr/local/hakoniwa/share/hakoniwa/offset")
+OFFSET_PATH = "tests/config/offset"
 DELTA_TIME_USEC = 1_000_000
 
 

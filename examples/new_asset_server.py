@@ -21,7 +21,7 @@ ASSET_NAME = 'NewServer'
 SERVICE_NAME = 'Service/Add'
 SERVICE_CONFIG_PATH = './examples/service.json'
 # HAKO_BINARY_PATH環境変数から取得するか、デフォルト値を設定
-OFFSET_PATH = '/usr/local/hakoniwa/share/hakoniwa/offset'
+OFFSET_PATH = 'tests/config/offset'
 DELTA_TIME_USEC = 1000 * 1000
 
 # グローバル変数としてマネージャとプロトコルを保持

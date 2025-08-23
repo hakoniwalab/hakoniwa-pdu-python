@@ -22,7 +22,7 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponse import (
 
 ASSET_NAME = "RemoteServer"
 SERVICE_NAME = "Service/Add"
-OFFSET_PATH = os.getenv("HAKO_BINARY_PATH", "/usr/local/hakoniwa/share/hakoniwa/offset")
+OFFSET_PATH = "tests/config/offset"
 DELTA_TIME_USEC = 1_000_000
 
 
@@ -30,6 +30,7 @@ async def add_handler(req: AddTwoIntsRequest) -> AddTwoIntsResponse:
     """加算サービスの実装."""
     res = AddTwoIntsResponse()
     res.sum = req.a + req.b
+    print(f"AddTwoInts called: {req.a} + {req.b} = {res.sum}")
     return res
 
 
