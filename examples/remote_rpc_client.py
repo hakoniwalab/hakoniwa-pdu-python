@@ -9,18 +9,9 @@ from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunica
 from hakoniwa_pdu.rpc.remote.remote_pdu_service_client_manager import (
     RemotePduServiceClientManager,
 )
-from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
-
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequestPacket import AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket import AddTwoIntsResponsePacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import (
-    pdu_to_py_AddTwoIntsRequestPacket,
-    py_to_pdu_AddTwoIntsRequestPacket,
-)
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import (
-    pdu_to_py_AddTwoIntsResponsePacket,
-    py_to_pdu_AddTwoIntsResponsePacket,
+from hakoniwa_pdu.rpc.auto_wire import make_protocol_client
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
+    AddTwoIntsRequest,
 )
 
 ASSET_NAME = "RemoteClient"
@@ -47,17 +38,16 @@ async def main() -> None:
     )
     manager.initialize_services(args.service_config, DELTA_TIME_USEC)
 
-    client = ProtocolClient(
+    client = make_protocol_client(
         pdu_manager=manager,
         service_name=SERVICE_NAME,
         client_name=CLIENT_NAME,
-        cls_req_packet=AddTwoIntsRequestPacket,
-        req_encoder=py_to_pdu_AddTwoIntsRequestPacket,
-        req_decoder=pdu_to_py_AddTwoIntsRequestPacket,
-        cls_res_packet=AddTwoIntsResponsePacket,
-        res_encoder=py_to_pdu_AddTwoIntsResponsePacket,
-        res_decoder=pdu_to_py_AddTwoIntsResponsePacket,
+        srv="AddTwoInts",
     )
+
+    if not await client.start_service(args.uri):
+        print("通信サービス開始に失敗しました")
+        return
 
     if not await client.register():
         print("クライアント登録に失敗しました")

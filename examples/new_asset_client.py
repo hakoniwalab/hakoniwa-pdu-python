@@ -4,16 +4,13 @@ import asyncio
 import sys
 import hakopy
 
-# 新しいRPCコンポーネントをインポート
-from hakoniwa_pdu.rpc.shm.shm_pdu_service_client_manager import ShmPduServiceClientManager
-from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
-
-# PDUの型定義とエンコーダ/デコーダをインポート
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequestPacket import AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket import AddTwoIntsResponsePacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket  import pdu_to_py_AddTwoIntsRequestPacket, py_to_pdu_AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import pdu_to_py_AddTwoIntsResponsePacket, py_to_pdu_AddTwoIntsResponsePacket
+from hakoniwa_pdu.rpc.shm.shm_pdu_service_client_manager import (
+    ShmPduServiceClientManager,
+)
+from hakoniwa_pdu.rpc.auto_wire import make_protocol_client
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
+    AddTwoIntsRequest,
+)
 
 # --- クライアント設定 ---
 ASSET_NAME = 'NewClient'
@@ -26,7 +23,7 @@ DELTA_TIME_USEC = 1000 * 1000
 
 # グローバル変数としてマネージャとプロトコルを保持
 pdu_manager: ShmPduServiceClientManager = None
-protocol_client: ProtocolClient = None
+protocol_client = None
 
 async def run_rpc_client():
     """
@@ -74,16 +71,11 @@ def my_on_initialize(context):
     global pdu_manager, protocol_client
     print("Initializing PDU Service Manager for SHM...")
 
-    protocol_client = ProtocolClient(
+    protocol_client = make_protocol_client(
         pdu_manager=pdu_manager,
         service_name=SERVICE_NAME,
         client_name=CLIENT_NAME,
-        cls_req_packet=AddTwoIntsRequestPacket,  # リクエストパケットのクラス
-        cls_res_packet=AddTwoIntsResponsePacket,  # レスポンスパケットのクラス
-        req_encoder=py_to_pdu_AddTwoIntsRequestPacket, # リクエストのエンコーダ
-        req_decoder=pdu_to_py_AddTwoIntsRequestPacket,  # リクエストのデコーダ
-        res_encoder=py_to_pdu_AddTwoIntsResponsePacket, # レスポンスのエンコーダ
-        res_decoder=pdu_to_py_AddTwoIntsResponsePacket   # レスポンスのデコーダ
+        srv="AddTwoInts",
     )
     # クライアントをサービスに登録
     print(f"Registering client '{CLIENT_NAME}' to service '{SERVICE_NAME}'...")

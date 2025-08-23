@@ -3,19 +3,17 @@
 import asyncio
 import sys
 import hakopy
-from typing import Any
 
-# 新しいRPCコンポーネントをインポート
-from hakoniwa_pdu.rpc.shm.shm_pdu_service_server_manager import ShmPduServiceServerManager
-from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
-
-# PDUの型定義とエンコーダ/デコーダをインポート
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponse import AddTwoIntsResponse
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequestPacket import AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket import AddTwoIntsResponsePacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import py_to_pdu_AddTwoIntsRequestPacket, pdu_to_py_AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import py_to_pdu_AddTwoIntsResponsePacket, pdu_to_py_AddTwoIntsResponsePacket
+from hakoniwa_pdu.rpc.shm.shm_pdu_service_server_manager import (
+    ShmPduServiceServerManager,
+)
+from hakoniwa_pdu.rpc.auto_wire import make_protocol_server
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
+    AddTwoIntsRequest,
+)
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponse import (
+    AddTwoIntsResponse,
+)
 
 # --- サーバー設定 ---
 ASSET_NAME = 'NewServer'
@@ -27,7 +25,7 @@ DELTA_TIME_USEC = 1000 * 1000
 
 # グローバル変数としてマネージャとプロトコルを保持
 pdu_manager: ShmPduServiceServerManager = None
-protocol_server: ProtocolServer = None
+protocol_server = None
 
 async def add_two_ints_handler(request: AddTwoIntsRequest) -> AddTwoIntsResponse:
     """
@@ -47,16 +45,11 @@ def my_on_initialize(context):
     global pdu_manager, protocol_server
     print(f"Starting service: {SERVICE_NAME}")
     # サーバープロトコルを初期化
-    protocol_server = ProtocolServer(
-        service_name=SERVICE_NAME,
-        max_clients=1,
+    protocol_server = make_protocol_server(
         pdu_manager=pdu_manager,
-        cls_req_packet=AddTwoIntsRequestPacket,  # リクエストPDUの型
-        req_encoder=py_to_pdu_AddTwoIntsRequestPacket,  # リクエストのエンコーダ
-        req_decoder=pdu_to_py_AddTwoIntsRequestPacket,  # リクエストのデコーダ
-        cls_res_packet=AddTwoIntsResponsePacket,  # レスポンスPDUの型
-        res_encoder=py_to_pdu_AddTwoIntsResponsePacket,  # レスポンスのエンコーダ
-        res_decoder=pdu_to_py_AddTwoIntsResponsePacket  # レスポンスのデコーダ
+        service_name=SERVICE_NAME,
+        srv="AddTwoInts",
+        max_clients=1,
     )
     # サービスを開始
     if not protocol_server.start_service_nowait():
