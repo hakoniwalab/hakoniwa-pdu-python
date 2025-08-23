@@ -8,6 +8,7 @@ from hakoniwa_pdu.rpc.shm.shm_pdu_service_client_manager import (
     ShmPduServiceClientManager,
 )
 from hakoniwa_pdu.rpc.auto_wire import make_protocol_client
+from hakoniwa_pdu.rpc.protocol_client import ProtocolClientImmediate
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
     AddTwoIntsRequest,
 )
@@ -38,7 +39,7 @@ async def run_rpc_client():
         req.a = 10
         req.b = 20
         print(f"\nCalling RPC: a={req.a}, b={req.b}")
-        res = protocol_client.call_nowait(req)
+        res = protocol_client.call(req)
         if res:
             print(f"Response received: sum={res.sum}")
         else:
@@ -50,7 +51,7 @@ async def run_rpc_client():
             req.a = res.sum
             req.b = 5
             print(f"\nCalling RPC: a={req.a}, b={req.b}")
-            res = protocol_client.call_nowait(req)
+            res = protocol_client.call(req)
             if res:
                 print(f"Response received: sum={res.sum}")
             else:
@@ -76,10 +77,11 @@ def my_on_initialize(context):
         service_name=SERVICE_NAME,
         client_name=CLIENT_NAME,
         srv="AddTwoInts",
+        ProtocolClientClass=ProtocolClientImmediate,
     )
     # クライアントをサービスに登録
     print(f"Registering client '{CLIENT_NAME}' to service '{SERVICE_NAME}'...")
-    if not protocol_client.register_nowait():
+    if not protocol_client.register():
         print("Failed to register client. Exiting.")
         return 1
     

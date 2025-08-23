@@ -8,6 +8,7 @@ from hakoniwa_pdu.rpc.shm.shm_pdu_service_server_manager import (
     ShmPduServiceServerManager,
 )
 from hakoniwa_pdu.rpc.auto_wire import make_protocol_server
+from hakoniwa_pdu.rpc.protocol_server import ProtocolServerImmediate
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
     AddTwoIntsRequest,
 )
@@ -50,9 +51,10 @@ def my_on_initialize(context):
         service_name=SERVICE_NAME,
         srv="AddTwoInts",
         max_clients=1,
+        ProtocolServerClass=ProtocolServerImmediate,
     )
     # サービスを開始
-    if not protocol_server.start_service_nowait():
+    if not protocol_server.start_service():
         print("Failed to start service.")
         return 1
 
@@ -67,7 +69,7 @@ def my_on_manual_timing_control(context):
     print("Server is running. Waiting for requests...")
     try:
         # サーバーのイベントループを開始
-        protocol_server.serve_nowait(add_two_ints_handler)
+        protocol_server.serve(add_two_ints_handler)
     except KeyboardInterrupt:
         print("\nServer stopped by user.")
     finally:
