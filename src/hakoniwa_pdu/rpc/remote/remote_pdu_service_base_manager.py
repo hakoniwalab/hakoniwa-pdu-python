@@ -1,4 +1,5 @@
 import time
+import asyncio
 from typing import Optional
 
 from ..ipdu_service_manager import IPduServiceManager
@@ -34,8 +35,8 @@ class RemotePduServiceBaseManager(IPduServiceManager):
         self.delta_time_sec = delta_time_usec / 1_000_000.0
         return 0
 
-    def sleep(self, time_sec: float) -> bool:
-        time.sleep(time_sec)
+    async def sleep(self, time_sec: float) -> bool:
+        await asyncio.sleep(time_sec)
         return True
 
 
