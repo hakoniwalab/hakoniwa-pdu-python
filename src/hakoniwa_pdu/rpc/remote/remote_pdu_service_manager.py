@@ -284,7 +284,7 @@ class RemotePduServiceManager(IPduServiceManagerBlocking):
             return None
 
         response = pdu_to_py_RegisterClientResponsePacket(response_buffer)
-        if response.header.result_code != IPduServiceManager.API_RESULT_CODE_OK:
+        if response.header.result_code != IPduServiceManagerBlocking.API_RESULT_CODE_OK:
             print(f"Failed to register client '{client_name}' to service '{service_name}': {response.header.result_code}")
             return None
 
@@ -319,7 +319,7 @@ class RemotePduServiceManager(IPduServiceManagerBlocking):
         if self.comm_buffer.contains_buffer(self._client_instance_service_name, self._client_instance_client_name):
             raw_data = self.comm_buffer.peek_buffer(self._client_instance_service_name, self._client_instance_client_name)
             response = self.res_decoder(raw_data)
-            if response.header.result_code == IPduServiceManager.API_RESULT_CODE_CANCELED:
+            if response.header.result_code == IPduServiceManagerBlocking.API_RESULT_CODE_CANCELED:
                 self._client_instance_request_id = self._client_instance_request_id + 1
                 return self.CLIENT_API_EVENT_REQUEST_CANCEL_DONE
             self._client_instance_request_id = self._client_instance_request_id + 1
