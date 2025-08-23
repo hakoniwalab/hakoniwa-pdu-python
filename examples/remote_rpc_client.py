@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""リモートRPCクライアントの簡易サンプル."""
+import asyncio
+import argparse
+import os
+
+from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
+from hakoniwa_pdu.rpc.remote.remote_pdu_service_manager import RemotePduServiceManager
+from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
+
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequestPacket import AddTwoIntsRequestPacket
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket import AddTwoIntsResponsePacket
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import (
+    pdu_to_py_AddTwoIntsRequestPacket,
+    py_to_pdu_AddTwoIntsRequestPacket,
+)
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import (
+    pdu_to_py_AddTwoIntsResponsePacket,
+    py_to_pdu_AddTwoIntsResponsePacket,
+)
+
+ASSET_NAME = "RemoteClient"
+CLIENT_NAME = "Client_1"
+SERVICE_NAME = "Service/Add"
+OFFSET_PATH = os.getenv("HAKO_BINARY_PATH", "/usr/local/hakoniwa/share/hakoniwa/offset")
+DELTA_TIME_USEC = 1_000_000
+
+
+async def main() -> None:
+    parser = argparse.ArgumentParser(description="Remote RPC client example")
+    parser.add_argument("--uri", default="ws://localhost:8080", help="WebSocketサーバのURI")
+    parser.add_argument("--pdu-config", default="examples/pdu_config.json")
+    parser.add_argument("--service-config", default="examples/service.json")
+    args = parser.parse_args()
+
+    comm = WebSocketCommunicationService(version="v2")
+    manager = RemotePduServiceManager(
+        asset_name=ASSET_NAME,
+        pdu_config_path=args.pdu_config,
+        offset_path=OFFSET_PATH,
+        comm_service=comm,
+        uri=args.uri,
+    )
+    manager.service_config_path = args.service_config
+
+    client = ProtocolClient(
+        pdu_manager=manager,
+        service_name=SERVICE_NAME,
+        client_name=CLIENT_NAME,
+        cls_req_packet=AddTwoIntsRequestPacket,
+        req_encoder=py_to_pdu_AddTwoIntsRequestPacket,
+        req_decoder=pdu_to_py_AddTwoIntsRequestPacket,
+        cls_res_packet=AddTwoIntsResponsePacket,
+        res_encoder=py_to_pdu_AddTwoIntsResponsePacket,
+        res_decoder=pdu_to_py_AddTwoIntsResponsePacket,
+    )
+
+    if not await client.register():
+        print("クライアント登録に失敗しました")
+        return
+
+    req = AddTwoIntsRequest()
+    req.a = 1
+    req.b = 2
+    res = await client.call(req, timeout_msec=1000)
+    if res is None:
+        print("RPC呼び出しに失敗しました")
+        return
+    print(f"レスポンス: {res.sum}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
