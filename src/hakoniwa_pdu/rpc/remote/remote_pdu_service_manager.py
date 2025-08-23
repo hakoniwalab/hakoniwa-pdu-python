@@ -92,7 +92,6 @@ class RemotePduServiceManager(IPduServiceManager):
         # PduManagerの基本的な初期化
         comm_service.register_event_handler(self.handler)
         self.initialize(config_path=pdu_config_path, comm_service=comm_service)
-        self.start_service()
 
 
     async def _handler_register_client(self, packet: DataPacket) -> None:
@@ -105,10 +104,14 @@ class RemotePduServiceManager(IPduServiceManager):
             raise ValueError(f"Client registry for service '{body_pdu_data.header.service_name}' already exists")
 
         # RPCクライアント登録
-        client_handle = ClientHandle()
-        client_handle.client_id = len(self._server_instance_client_registry.clients)
-        client_handle.request_channel_id = (client_handle.client_id * 2)
-        client_handle.response_channel_id = (client_handle.client_id * 2) + 1
+        client_id = len(self._server_instance_client_registry.clients)
+        request_channel_id = (client_id * 2)
+        response_channel_id = (client_id * 2) + 1
+        client_handle = ClientHandle(
+            client_id=client_id,
+            request_channel_id=request_channel_id,
+            response_channel_id=response_channel_id
+        )
         self._server_instance_client_registry.clients[body_pdu_data.header.client_name] = client_handle
 
         # 応答パケット作成

@@ -34,6 +34,10 @@ class ProtocolClient:
         self.pdu_manager.register_req_serializer(cls_req_packet, req_encoder, req_decoder)
         self.pdu_manager.register_res_serializer(cls_res_packet, res_encoder, res_decoder)
 
+
+    async def start_service(self, uri: str) -> bool:
+        return await self.pdu_manager.start_service(uri=uri)
+
     def register_nowait(self) -> bool:
         """
         クライアントをサービスに登録する。リクエスト送信前に呼び出す必要がある。

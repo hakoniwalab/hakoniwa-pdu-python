@@ -419,6 +419,6 @@ class PduManager:
         packet = DataPacket(
             robot_name=robot_name,
             channel_id=channel_id,
-            pdu_data=pdu_data
+            body_data=pdu_data
         )
         return packet.encode(version = "v2", meta_request_type=meta_request_type)
