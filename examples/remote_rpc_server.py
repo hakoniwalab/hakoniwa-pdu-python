@@ -12,6 +12,7 @@ from hakoniwa_pdu.rpc.remote.remote_pdu_service_server_manager import (
     RemotePduServiceServerManager,
 )
 from hakoniwa_pdu.rpc.auto_wire import make_protocol_server
+from hakoniwa_pdu.rpc.protocol_server import ProtocolServerBlocking
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
     AddTwoIntsRequest,
 )
@@ -55,6 +56,7 @@ async def main() -> None:
         service_name=SERVICE_NAME,
         srv="AddTwoInts",
         max_clients=1,
+        ProtocolServerClass=ProtocolServerBlocking,
     )
 
     if not await server.start_service():

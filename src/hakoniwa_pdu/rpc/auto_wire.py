@@ -1,6 +1,7 @@
 """Utility helpers to construct ProtocolClient/Server with minimal imports."""
 from importlib import import_module
 from typing import Any, Tuple, Type, Callable, Optional
+import asyncio
 
 
 def _load_protocol_components(srv: str, pkg: str) -> Tuple[type, type, Callable, Callable, Callable, Callable]:
@@ -64,7 +65,15 @@ def make_protocol_client(*, pdu_manager: Any, service_name: str, client_name: st
         Custom ``ProtocolClient`` class to instantiate.
     """
     if ProtocolClientClass is None:
-        from .protocol_client import ProtocolClient as ProtocolClientClass  # type: ignore
+        from .protocol_client import (
+            ProtocolClientBlocking,
+            ProtocolClientImmediate,
+        )  # type: ignore
+        register_client = getattr(pdu_manager, "register_client", None)
+        if asyncio.iscoroutinefunction(register_client):
+            ProtocolClientClass = ProtocolClientBlocking
+        else:
+            ProtocolClientClass = ProtocolClientImmediate
 
     ReqPacket, ResPacket, req_encoder, req_decoder, res_encoder, res_decoder = _load_protocol_components(srv, pkg)
 
@@ -86,7 +95,15 @@ def make_protocol_server(*, pdu_manager: Any, service_name: str, srv: str, max_c
                          ProtocolServerClass: Optional[Type[Any]] = None):
     """Create :class:`ProtocolServer` from a service name."""
     if ProtocolServerClass is None:
-        from .protocol_server import ProtocolServer as ProtocolServerClass  # type: ignore
+        from .protocol_server import (
+            ProtocolServerBlocking,
+            ProtocolServerImmediate,
+        )  # type: ignore
+        start_rpc_service = getattr(pdu_manager, "start_rpc_service", None)
+        if asyncio.iscoroutinefunction(start_rpc_service):
+            ProtocolServerClass = ProtocolServerBlocking
+        else:
+            ProtocolServerClass = ProtocolServerImmediate
 
     ReqPacket, ResPacket, req_encoder, req_decoder, res_encoder, res_decoder = _load_protocol_components(srv, pkg)
 
