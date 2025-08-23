@@ -5,7 +5,9 @@ import asyncio
 import argparse
 import os
 
-from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
+from hakoniwa_pdu.impl.websocket_server_communication_service import (
+    WebSocketServerCommunicationService,
+)
 from hakoniwa_pdu.rpc.remote.remote_pdu_service_manager import RemotePduServiceManager
 from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
 
@@ -42,7 +44,8 @@ async def main() -> None:
     parser.add_argument("--service-config", default="examples/service.json")
     args = parser.parse_args()
 
-    comm = WebSocketCommunicationService(version="v2")
+    # WebSocketサーバ機能を持つコミュニケーションサービス
+    comm = WebSocketServerCommunicationService(version="v2")
     manager = RemotePduServiceManager(
         asset_name=ASSET_NAME,
         pdu_config_path=args.pdu_config,
