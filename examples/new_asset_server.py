@@ -6,7 +6,7 @@ import hakopy
 from typing import Any
 
 # 新しいRPCコンポーネントをインポート
-from hakoniwa_pdu.rpc.shm.shm_pdu_service_manager import ShmPduServiceManager
+from hakoniwa_pdu.rpc.shm.shm_pdu_service_server_manager import ShmPduServiceServerManager
 from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
 
 # PDUの型定義とエンコーダ/デコーダをインポート
@@ -26,7 +26,7 @@ OFFSET_PATH = '/usr/local/hakoniwa/share/hakoniwa/offset'
 DELTA_TIME_USEC = 1000 * 1000
 
 # グローバル変数としてマネージャとプロトコルを保持
-pdu_manager: ShmPduServiceManager = None
+pdu_manager: ShmPduServiceServerManager = None
 protocol_server: ProtocolServer = None
 
 async def add_two_ints_handler(request: AddTwoIntsRequest) -> AddTwoIntsResponse:
@@ -105,7 +105,7 @@ def main():
 
     # PDUサービスマネージャを初期化
     print("Initializing PDU Service Manager for SHM...")
-    pdu_manager = ShmPduServiceManager(
+    pdu_manager = ShmPduServiceServerManager(
         asset_name=ASSET_NAME,
         pdu_config_path=pdu_config_path,
         offset_path=OFFSET_PATH

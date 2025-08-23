@@ -2,12 +2,12 @@ import asyncio
 
 from typing import Any, Callable, Type, Optional, Union
 from .ipdu_service_manager import (
-    IPduServiceManagerImmediate,
-    IPduServiceManagerBlocking,
+    IPduServiceClientManagerImmediate,
+    IPduServiceClientManagerBlocking,
     ClientId,
 )
 import time
-PduManagerType = Union[IPduServiceManagerImmediate, IPduServiceManagerBlocking]
+PduManagerType = Union[IPduServiceClientManagerImmediate, IPduServiceClientManagerBlocking]
 
 
 class ProtocolClient:

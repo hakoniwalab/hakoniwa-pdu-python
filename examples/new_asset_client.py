@@ -5,7 +5,7 @@ import sys
 import hakopy
 
 # 新しいRPCコンポーネントをインポート
-from hakoniwa_pdu.rpc.shm.shm_pdu_service_manager import ShmPduServiceManager
+from hakoniwa_pdu.rpc.shm.shm_pdu_service_client_manager import ShmPduServiceClientManager
 from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
 
 # PDUの型定義とエンコーダ/デコーダをインポート
@@ -25,7 +25,7 @@ OFFSET_PATH = '/usr/local/hakoniwa/share/hakoniwa/offset'
 DELTA_TIME_USEC = 1000 * 1000
 
 # グローバル変数としてマネージャとプロトコルを保持
-pdu_manager: ShmPduServiceManager = None
+pdu_manager: ShmPduServiceClientManager = None
 protocol_client: ProtocolClient = None
 
 async def run_rpc_client():
@@ -128,7 +128,7 @@ def main():
     pdu_config_path = sys.argv[1]
 
     # 1. PDUサービスマネージャを初期化
-    pdu_manager = ShmPduServiceManager(
+    pdu_manager = ShmPduServiceClientManager(
         asset_name=ASSET_NAME,
         pdu_config_path=pdu_config_path,
         offset_path=OFFSET_PATH

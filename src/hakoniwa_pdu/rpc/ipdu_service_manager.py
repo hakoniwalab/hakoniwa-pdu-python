@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Tuple, Optional, Callable, Type
+from typing import Any, Callable, Optional, Tuple, Type
 
 from hakoniwa_pdu.pdu_manager import PduManager
 
@@ -34,7 +34,7 @@ class IPduServiceManager(PduManager, ABC):
         self.res_encoder = res_encoder
         self.res_decoder = res_decoder
 
-    # --- サーバー側共通操作 ---
+    # --- サーバー/クライアント共通操作 ---
     @abstractmethod
     def initialize_services(self, service_config_path: str, delta_time_usec: int) -> int:
         pass
@@ -86,15 +86,9 @@ class IPduServiceManager(PduManager, ABC):
     TRIGGER_EVENT_ID_STOP = 1
     TRIGGER_EVENT_ID_RESET = 2
 
-    @abstractmethod
-    def get_response_buffer(
-        self, client_id: ClientId, status: int, result_code: int
-    ) -> Optional[PduData]:
-        pass
 
-    @abstractmethod
-    def get_request(self) -> Tuple[ClientId, PduData]:
-        pass
+class IPduServiceClientManager(IPduServiceManager, ABC):
+    """クライアント側の操作を定義するインターフェース"""
 
     @abstractmethod
     def get_request_buffer(
@@ -110,20 +104,6 @@ class IPduServiceManager(PduManager, ABC):
     def get_response(self, service_name: str, client_id: ClientId) -> PduData:
         pass
 
-    # --- サーバーイベント種別判定 ---
-    @abstractmethod
-    def is_server_event_request_in(self, event: Event) -> bool:
-        pass
-
-    @abstractmethod
-    def is_server_event_cancel(self, event: Event) -> bool:
-        pass
-
-    @abstractmethod
-    def is_server_event_none(self, event: Event) -> bool:
-        pass
-
-    # --- クライアント側イベント判定 ---
     @abstractmethod
     def is_client_event_response_in(self, event: Event) -> bool:
         pass
@@ -146,10 +126,53 @@ class IPduServiceManager(PduManager, ABC):
         pass
 
 
-class IPduServiceManagerImmediate(IPduServiceManager):
-    """nowait系APIを提供する実装が従うインターフェース"""
+class IPduServiceServerManager(IPduServiceManager, ABC):
+    """サーバー側の操作を定義するインターフェース"""
 
-    # --- サーバー側操作 ---
+    @abstractmethod
+    def get_response_buffer(
+        self, client_id: ClientId, status: int, result_code: int
+    ) -> Optional[PduData]:
+        pass
+
+    @abstractmethod
+    def get_request(self) -> Tuple[ClientId, PduData]:
+        pass
+
+    @abstractmethod
+    def is_server_event_request_in(self, event: Event) -> bool:
+        pass
+
+    @abstractmethod
+    def is_server_event_cancel(self, event: Event) -> bool:
+        pass
+
+    @abstractmethod
+    def is_server_event_none(self, event: Event) -> bool:
+        pass
+
+
+class IPduServiceClientManagerImmediate(IPduServiceClientManager):
+    """nowait系APIを提供するクライアント側インターフェース"""
+
+    @abstractmethod
+    def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
+        pass
+
+    @abstractmethod
+    def call_request(
+        self, client_id: ClientId, pdu_data: PduData, timeout_msec: int
+    ) -> bool:
+        pass
+
+    @abstractmethod
+    def cancel_request(self, client_id: ClientId) -> bool:
+        pass
+
+
+class IPduServiceServerManagerImmediate(IPduServiceServerManager):
+    """nowait系APIを提供するサーバー側インターフェース"""
+
     @abstractmethod
     def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
         pass
@@ -166,26 +189,30 @@ class IPduServiceManagerImmediate(IPduServiceManager):
     def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
         pass
 
-    # --- クライアント側操作 ---
+
+class IPduServiceClientManagerBlocking(IPduServiceClientManager):
+    """async/awaitを用いるブロッキングAPIのクライアントインターフェース"""
+
     @abstractmethod
-    def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
+    async def register_client(
+        self, service_name: str, client_name: str
+    ) -> Optional[ClientId]:
         pass
 
     @abstractmethod
-    def call_request(
+    async def call_request(
         self, client_id: ClientId, pdu_data: PduData, timeout_msec: int
     ) -> bool:
         pass
 
     @abstractmethod
-    def cancel_request(self, client_id: ClientId) -> bool:
+    async def cancel_request(self, client_id: ClientId) -> bool:
         pass
 
 
-class IPduServiceManagerBlocking(IPduServiceManager):
-    """async/awaitを用いるブロッキングAPIのインターフェース"""
+class IPduServiceServerManagerBlocking(IPduServiceServerManager):
+    """async/awaitを用いるブロッキングAPIのサーバーインターフェース"""
 
-    # --- サーバー側操作 ---
     @abstractmethod
     async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
         pass
@@ -204,23 +231,6 @@ class IPduServiceManagerBlocking(IPduServiceManager):
     ) -> bool:
         pass
 
-    # --- クライアント側操作 ---
-    @abstractmethod
-    async def register_client(
-        self, service_name: str, client_name: str
-    ) -> Optional[ClientId]:
-        pass
-
-    @abstractmethod
-    async def call_request(
-        self, client_id: ClientId, pdu_data: PduData, timeout_msec: int
-    ) -> bool:
-        pass
-
-    @abstractmethod
-    async def cancel_request(self, client_id: ClientId) -> bool:
-        pass
-
 
 __all__ = [
     "ClientId",
@@ -228,7 +238,11 @@ __all__ = [
     "PyPduData",
     "Event",
     "IPduServiceManager",
-    "IPduServiceManagerImmediate",
-    "IPduServiceManagerBlocking",
+    "IPduServiceClientManager",
+    "IPduServiceServerManager",
+    "IPduServiceClientManagerImmediate",
+    "IPduServiceClientManagerBlocking",
+    "IPduServiceServerManagerImmediate",
+    "IPduServiceServerManagerBlocking",
 ]
 

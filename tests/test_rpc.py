@@ -2,8 +2,15 @@ import asyncio
 import os
 import pytest
 from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
-from hakoniwa_pdu.impl.websocket_server_communication_service import WebSocketServerCommunicationService
-from hakoniwa_pdu.rpc.remote.remote_pdu_service_manager import RemotePduServiceManager
+from hakoniwa_pdu.impl.websocket_server_communication_service import (
+    WebSocketServerCommunicationService,
+)
+from hakoniwa_pdu.rpc.remote.remote_pdu_service_server_manager import (
+    RemotePduServiceServerManager,
+)
+from hakoniwa_pdu.rpc.remote.remote_pdu_service_client_manager import (
+    RemotePduServiceClientManager,
+)
 from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
 from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
@@ -26,7 +33,9 @@ async def test_remote_rpc_call():
 
     # Server setup
     server_comm = WebSocketServerCommunicationService(version="v2")
-    server_pdu_manager = RemotePduServiceManager("test_server", pdu_config_path, offset_path, server_comm, uri)
+    server_pdu_manager = RemotePduServiceServerManager(
+        "test_server", pdu_config_path, offset_path, server_comm, uri
+    )
     server_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
     protocol_server = ProtocolServer(
         service_name="Service/Add",
@@ -50,8 +59,10 @@ async def test_remote_rpc_call():
 
     # Client setup
     client_comm = WebSocketCommunicationService(version="v2")
-    client_pdu_manager = RemotePduServiceManager("test_client", pdu_config_path, offset_path, client_comm, uri)
-    client_pdu_manager.service_config_path = service_config_path
+    client_pdu_manager = RemotePduServiceClientManager(
+        "test_client", pdu_config_path, offset_path, client_comm, uri
+    )
+    client_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
     protocol_client = ProtocolClient(
         pdu_manager=client_pdu_manager,
         service_name="Service/Add",
