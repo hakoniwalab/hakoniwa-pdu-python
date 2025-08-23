@@ -1,0 +1,42 @@
+{
+  "robots": [
+    {
+      "name": "test_client",
+      "shm_pdu_writers": [
+        {
+          "channel_id": 1,
+          "org_name": "client_to_server",
+          "pdu_size": 24,
+          "type": "hako_msgs/SimpleVarray"
+        }
+      ],
+      "shm_pdu_readers": [
+        {
+            "channel_id": 2,
+            "org_name": "server_to_client",
+            "pdu_size": 24,
+            "type": "hako_msgs/SimpleVarray"
+        }
+      ]
+    },
+    {
+      "name": "test_server",
+      "shm_pdu_readers": [
+        {
+          "channel_id": 1,
+          "org_name": "client_to_server",
+          "pdu_size": 24,
+          "type": "hako_msgs/SimpleVarray"
+        }
+      ],
+      "shm_pdu_writers": [
+        {
+            "channel_id": 2,
+            "org_name": "server_to_client",
+            "pdu_size": 24,
+            "type": "hako_msgs/SimpleVarray"
+        }
+      ]
+    }
+  ]
+}

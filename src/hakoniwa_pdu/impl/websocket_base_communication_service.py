@@ -1,19 +1,11 @@
 import asyncio
-from typing import Optional, Callable
-from websockets.legacy.protocol import WebSocketCommonProtocol
+from typing import Optional, Callable, Union
+from websockets import WebSocketClientProtocol, WebSocketServerProtocol
 
 from .communication_buffer import CommunicationBuffer
-from .data_packet import DataPacket
+from .data_packet import DataPacket, PDU_DATA, PDU_DATA_RPC_REQUEST, PDU_DATA_RPC_REPLY, DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_CLIENT
 from .icommunication_service import ICommunicationService
 from .pdu_channel_config import PduChannelConfig
-from hakoniwa_pdu.impl.data_packet import (
-    DECLARE_PDU_FOR_READ,
-    DECLARE_PDU_FOR_WRITE,
-    PDU_DATA,
-    REGISTER_RPC_CLIENT,
-    PDU_DATA_RPC_REQUEST,
-    PDU_DATA_RPC_REPLY,
-)
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceRequestHeader import (
     ServiceRequestHeader,
 )
@@ -30,7 +22,9 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceResponseHeader import (
 
 class WebSocketBaseCommunicationService(ICommunicationService):
     def __init__(self, version: str = "v1"):
-        self.websocket: Optional[WebSocketCommonProtocol] = None
+        self.websocket: Optional[
+            Union[WebSocketClientProtocol, WebSocketServerProtocol]
+        ] = None
         self.uri: str = ""
         self.service_enabled: bool = False
         self.comm_buffer: Optional[CommunicationBuffer] = None
@@ -66,7 +60,7 @@ class WebSocketBaseCommunicationService(ICommunicationService):
             return False
         try:
             packet = DataPacket(robot_name, channel_id, pdu_data)
-            encoded = packet.encode()
+            encoded = packet.encode(self.version, meta_request_type=PDU_DATA)
             await self.websocket.send(encoded)
             return True
         except Exception as e:
@@ -84,7 +78,10 @@ class WebSocketBaseCommunicationService(ICommunicationService):
             print(f"[ERROR] Failed to send binary data: {e}")
             return False
 
-    async def _receive_loop_v1(self, websocket: Optional[WebSocketCommonProtocol] = None):
+    async def _receive_loop_v1(
+        self,
+        websocket: Optional[Union[WebSocketClientProtocol, WebSocketServerProtocol]] = None,
+    ):
         ws = websocket or self.websocket
         try:
             async for message in ws:
@@ -99,22 +96,25 @@ class WebSocketBaseCommunicationService(ICommunicationService):
         except Exception as e:
             print(f"[ERROR] Receive loop failed: {e}")
 
-    async def _receive_loop_v2(self, websocket: Optional[WebSocketCommonProtocol] = None):
+    async def _receive_loop_v2(
+        self,
+        websocket: Optional[Union[WebSocketClientProtocol, WebSocketServerProtocol]] = None,
+    ):
         ws = websocket or self.websocket
         try:
             async for message in ws:
                 if isinstance(message, bytes):
                     packet = DataPacket.decode(bytearray(message), version=self.version)
-                    if packet and self.comm_buffer and packet.meta_pdu.message_type in [PDU_DATA]:
+                    if packet and self.comm_buffer and packet.meta_pdu.meta_request_type in [PDU_DATA]:
                         self.comm_buffer.put_packet(packet)
-                    elif packet and packet.meta_pdu.message_type in [PDU_DATA_RPC_REQUEST]:
+                    elif packet and packet.meta_pdu.meta_request_type in [PDU_DATA_RPC_REQUEST]:
                         header: ServiceRequestHeader = pdu_to_py_ServiceRequestHeader(
                             packet.get_pdu_data()
                         )
                         self.comm_buffer.put_rpc_packet(
                             header.service_name, header.client_name, packet.get_pdu_data()
                         )
-                    elif packet and packet.meta_pdu.message_type in [PDU_DATA_RPC_REPLY]:
+                    elif packet and packet.meta_pdu.meta_request_type in [PDU_DATA_RPC_REPLY]:
                         header: ServiceResponseHeader = pdu_to_py_ServiceResponseHeader(
                             packet.get_pdu_data()
                         )
@@ -123,14 +123,14 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                         )
                     elif (
                         packet
-                        and packet.meta_pdu.message_type
+                        and packet.meta_pdu.meta_request_type
                         in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_CLIENT]
                         and self.handler
                     ):
                         await self.handler(packet)
                     else:
                         raise ValueError(
-                            f"Unknown message type: {packet.meta_pdu.message_type if packet else 'None'}"
+                            f"Unknown message type: {packet.meta_pdu.meta_request_type if packet else 'None'}"
                         )
                 else:
                     print(f"[WARN] Unexpected message type: {type(message)}")

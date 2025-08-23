@@ -147,7 +147,7 @@ class DataPacket:
         if body_view is None:
             return None
 
-        pkt = cls(meta=meta, body=bytearray(body_view))
+        pkt = cls(meta=meta, body_data=bytearray(body_view))
         return pkt
 
     @staticmethod
