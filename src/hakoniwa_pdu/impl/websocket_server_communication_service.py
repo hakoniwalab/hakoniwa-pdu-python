@@ -52,8 +52,18 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
             self.websocket = None
         return True
 
-    async def _client_handler(self, websocket: WebSocketServerProtocol, path: str):
-        print(f"[DEBUG] _client_handler: new client connected")
+    async def _client_handler(
+        self, websocket: WebSocketServerProtocol, path: str | None = None
+    ):
+        """Handle a newly connected client.
+
+        Recent versions of the ``websockets`` package (>=11) invoke the
+        connection handler with only the websocket argument, while older
+        versions pass an additional ``path`` parameter.  To remain
+        compatible across versions we accept ``path`` as an optional
+        argument and ignore it.
+        """
+        print("[DEBUG] _client_handler: new client connected")
         if self.websocket is not None:
             # Allow only one client
             await websocket.close()

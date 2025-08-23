@@ -1,4 +1,5 @@
 import asyncio
+import os
 import pytest
 from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
 from hakoniwa_pdu.impl.websocket_server_communication_service import WebSocketServerCommunicationService
@@ -12,13 +13,19 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket imp
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import pdu_to_py_AddTwoIntsRequestPacket, py_to_pdu_AddTwoIntsRequestPacket
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import pdu_to_py_AddTwoIntsResponsePacket, py_to_pdu_AddTwoIntsResponsePacket
 
+OFFSET_PATH = "/usr/local/hakoniwa/share/hakoniwa/offset"
+
+
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not os.path.exists(OFFSET_PATH), reason="offset files not present"
+)
 async def test_remote_rpc_call():
     # 1. Setup
     uri = "ws://localhost:8772"
     pdu_config_path = "tests/pdu_config.json"
     service_config_path = "examples/service.json"
-    offset_path = "/usr/local/hakoniwa/share/hakoniwa/offset"
+    offset_path = OFFSET_PATH
 
     # Server setup
     server_comm = WebSocketServerCommunicationService(version="v2")

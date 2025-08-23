@@ -3,7 +3,13 @@ from typing import Any, Tuple, Optional, Dict
 import asyncio
 import time
 
-from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, PyPduData, Event
+from ..ipdu_service_manager import (
+    IPduServiceManagerBlocking,
+    ClientId,
+    PduData,
+    PyPduData,
+    Event,
+)
 from hakoniwa_pdu.pdu_manager import PduManager
 from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
 from hakoniwa_pdu.rpc.service_config import ServiceConfig
@@ -46,7 +52,7 @@ class ClientRegistry:
     def __init__(self):
         self.clients: Dict[str, ClientHandle] = {}  # client_name -> ClientHandle
 
-class RemotePduServiceManager(IPduServiceManager):
+class RemotePduServiceManager(IPduServiceManagerBlocking):
     """
     Manage remote PDU services for a specific robot.
     """
@@ -159,9 +165,6 @@ class RemotePduServiceManager(IPduServiceManager):
         self._server_instance_delta_time_usec = delta_time_usec
         self._server_instance_delta_time_sec: float = delta_time_usec / 1_000_000.0
 
-    def start_rpc_service_nowait(self, service_name: str, max_clients: int) -> bool:
-        raise NotImplementedError("start_rpc_service_nowait is not implemented")
-
     async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
         offmap = offset_map.create_offmap(self.offset_path)
         self.service_config = ServiceConfig(self._server_instance_service_config_path, offmap, hakopy=None)
@@ -187,9 +190,6 @@ class RemotePduServiceManager(IPduServiceManager):
         py_pdu_data.header.result_code = result_code
         pdu_data = self.res_encoder(py_pdu_data)
         return pdu_data
-
-    def poll_request_nowait(self) -> Event:
-        raise NotImplementedError("poll_request_nowait is not implemented")
 
     async def poll_request(self) -> Event:
         print(f"[DEBUG] poll_request start")
@@ -245,12 +245,6 @@ class RemotePduServiceManager(IPduServiceManager):
         self._server_instance_request_id = None
         return True
 
-    def put_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        raise NotImplementedError("put_response_nowait is not implemented")
-
-    def put_cancel_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        raise NotImplementedError("put_cancel_response_nowait is not implemented")
-
     # --- クライアント側操作 ---
 
     async def register_client(self, service_name: str, client_name: str, timeout: float = 1.0) -> Optional[ClientId]:
@@ -296,10 +290,6 @@ class RemotePduServiceManager(IPduServiceManager):
 
         return response.body
 
-    def register_client_nowait(self, service_name: str, client_name: str) -> Optional[ClientId]:
-        raise NotImplementedError("register_client_nowait is not implemented")
-
-
     async def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
         # pdu_dataは、パケット形式になっているので、buildしてラップすればOK。
         self._client_instance_timeout_msec = timeout_msec
@@ -310,10 +300,6 @@ class RemotePduServiceManager(IPduServiceManager):
             return False
         self._client_instance_request_buffer = raw_data
         return True
-
-    def call_request_nowait(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
-        raise NotImplementedError("call_request_nowait is not implemented")
-
 
     def get_request_buffer(self, client_id: int, opcode: int, poll_interval_msec: int, request_id: int) -> bytes:
         self._client_instance_poll_interval_msec = poll_interval_msec
@@ -358,9 +344,6 @@ class RemotePduServiceManager(IPduServiceManager):
             return False
         self._client_instance_request_buffer = pdu_data
         return True
-
-    def cancel_request_nowait(self, client_id: ClientId) -> bool:
-        raise NotImplementedError("cancel_request_nowait is not implemented")
 
     # --- サーバーイベント種別判定 ---
 

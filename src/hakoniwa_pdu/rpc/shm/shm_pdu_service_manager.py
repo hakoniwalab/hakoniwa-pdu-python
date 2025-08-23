@@ -3,12 +3,18 @@ import sys
 import time
 from typing import Any, Tuple, Optional, Dict
 
-from ..ipdu_service_manager import IPduServiceManager, ClientId, PduData, PyPduData, Event
+from ..ipdu_service_manager import (
+    IPduServiceManagerImmediate,
+    ClientId,
+    PduData,
+    PyPduData,
+    Event,
+)
 from ..service_config import ServiceConfig
 from hakoniwa_pdu.impl.shm_communication_service import ShmCommunicationService
 from hakoniwa_pdu.impl.hako_binary import offset_map
 
-class ShmPduServiceManager(IPduServiceManager):
+class ShmPduServiceManager(IPduServiceManagerImmediate):
     """
     IPduServiceManagerインターフェースの共有メモリ（SHM）向け実装。
     内部でhakopyライブラリを呼び出す。
@@ -44,10 +50,7 @@ class ShmPduServiceManager(IPduServiceManager):
         return hakopy.service_initialize(self.service_config_path)
 
     # --- サーバー側操作 ---
-    async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
-        raise NotImplementedError("ShmPduServiceManager does not support async start_service.")
-
-    def start_rpc_service_nowait(self, service_name: str, max_clients: int) -> bool:
+    def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
         print(f"Starting service '{service_name}' with max_clients={max_clients}...")
         #PduManagerのstart_service_nowait()を呼び出す
         super().start_service_nowait(uri="")
@@ -72,10 +75,7 @@ class ShmPduServiceManager(IPduServiceManager):
         time.sleep(time_sec)
         return 0
 
-    async def poll_request(self) -> Event:
-        raise NotImplementedError("ShmPduServiceManager does not support async poll_request. Use poll_request_nowait instead.")
-
-    def poll_request_nowait(self) -> Event:
+    def poll_request(self) -> Event:
         # 複数のサービスを管理する場合、どのサービスをポーリングするかの指定が必要だが、
         # ここでは最初に作られたサービスを対象とする簡易的な実装とする。
         if not self.service_id_map:
@@ -129,27 +129,18 @@ class ShmPduServiceManager(IPduServiceManager):
             raise Exception("Failed to get request byte array")
         return byte_array
 
-    async def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        raise NotImplementedError("ShmPduServiceManager does not support async put_response. Use put_response_nowait instead.")
-
-    def put_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    def put_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
         service_id = self.current_server_client_info.get('service_id')
         #print(f"Putting response for client {client_id} on service {service_id}")
         return hakopy.asset_service_server_put_response(service_id, pdu_data)
 
-    async def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
-        raise NotImplementedError("ShmPduServiceManager does not support async put_cancel_response. Use put_cancel_response_nowait instead.")
-
-    def put_cancel_response_nowait(self, client_id: ClientId, pdu_data: PduData) -> bool:
+    def put_cancel_response(self, client_id: ClientId, pdu_data: PduData) -> bool:
         service_id = self.current_server_client_info.get('service_id')
         return hakopy.asset_service_client_cancel_request(service_id, client_id)
 
     # --- クライアント側操作 ---
 
-    async def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
-        raise NotImplementedError("Not supported")
-
-    def register_client_nowait(self, service_name: str, client_name: str) -> Optional[ClientId]:
+    def register_client(self, service_name: str, client_name: str) -> Optional[ClientId]:
         offmap = offset_map.create_offmap(self.offset_path)
         self.service_config = ServiceConfig(self.service_config_path, offmap, hakopy=hakopy)
 
@@ -170,14 +161,11 @@ class ShmPduServiceManager(IPduServiceManager):
         #print(f'response_channel_id={self.response_channel_id} request_channel_id={self.request_channel_id}')
         return client_id
 
-    def call_request_nowait(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
+    def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
         handle = self.client_handles.get(client_id)
         if not handle:
             raise ValueError(f"Invalid client_id: {client_id}")
         return hakopy.asset_service_client_call_request(handle, pdu_data, timeout_msec)
-    
-    async def call_request(self, client_id: ClientId, pdu_data: PduData, timeout_msec: int) -> bool:
-        raise NotImplementedError("call_request is not implemented")
 
     def poll_response(self, client_id: ClientId) -> Event:
         self.sleep(self.delta_time_sec)
@@ -199,14 +187,11 @@ class ShmPduServiceManager(IPduServiceManager):
             raise Exception("Failed to read response packet")
         return raw_data
 
-    def cancel_request_nowait(self, client_id: ClientId) -> bool:
+    def cancel_request(self, client_id: ClientId) -> bool:
         handle = self.client_handles.get(client_id)
         if not handle:
             raise ValueError(f"Invalid client_id: {client_id}")
         return hakopy.asset_service_client_cancel_request(handle)
-    
-    async def cancel_request(self, client_id: ClientId) -> bool:
-        raise NotImplementedError("cancel_request is not implemented")
 
     # --- サーバーイベント種別判定 ---
 
