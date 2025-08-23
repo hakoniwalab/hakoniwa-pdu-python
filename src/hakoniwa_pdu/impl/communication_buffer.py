@@ -10,6 +10,7 @@ class CommunicationBuffer:
         self.pdu_channel_config = pdu_channel_config
 
     def set_buffer(self, robot_name: str, pdu_name: str, data: bytearray):
+        #print(f"[DEBUG] set_buffer: key=({robot_name}, {pdu_name})")
         with self.lock:
             self.pdu_buffer[(robot_name, pdu_name)] = data
 
@@ -22,6 +23,7 @@ class CommunicationBuffer:
             return self.pdu_buffer.get((robot_name, pdu_name), bytearray())
 
     def contains_buffer(self, robot_name: str, pdu_name: str) -> bool:
+        #print(f"[DEBUG] contains_buffer: key=({robot_name}, {pdu_name})")
         with self.lock:
             return (robot_name, pdu_name) in self.pdu_buffer
 
@@ -55,4 +57,5 @@ class CommunicationBuffer:
         self.set_buffer(robot_name, pdu_name, pdu_data)
 
     def put_rpc_packet(self, service_name: str, client_name: str, pdu_data: bytearray):
+        #print(f"[DEBUG] put_rpc_packet: service={service_name}, client={client_name}")
         self.set_buffer(service_name, client_name, pdu_data)

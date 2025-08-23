@@ -47,7 +47,9 @@ class ProtocolServer:
         self._is_serving = True
         print("Server protocol started (async)...")
         while self._is_serving:
+            print("[DEBUG] serve: polling request...")
             event = await self.pdu_manager.poll_request()
+            print(f"[DEBUG] serve: polled event {event}")
 
             if self.pdu_manager.is_server_event_request_in(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
@@ -69,7 +71,9 @@ class ProtocolServer:
                     print(f"Error processing cancel request from client {client_id}: {e}")
 
             elif self.pdu_manager.is_server_event_none(event):
+                print(f"[DEBUG] serve: no event poll_interval={poll_interval}")
                 await asyncio.sleep(poll_interval)
+                print(f"[DEBUG] serve: woke up from sleep")
             
             else:
                 print(f"Unhandled server event: {event}")

@@ -53,6 +53,7 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         return True
 
     async def _client_handler(self, websocket: WebSocketServerProtocol, path: str):
+        print(f"[DEBUG] _client_handler: new client connected")
         if self.websocket is not None:
             # Allow only one client
             await websocket.close()

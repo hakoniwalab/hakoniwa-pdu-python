@@ -2,7 +2,7 @@ import asyncio
 
 from typing import Any, Callable, Type, Optional
 from .ipdu_service_manager import IPduServiceManager, ClientId
-
+import time
 class ProtocolClient:
     """
     IPduServiceManagerを介してクライアントのRPCプロトコルを処理するクラス。
@@ -101,9 +101,9 @@ class ProtocolClient:
         req_pdu_data = self.req_encoder(req_packet)
         return req_pdu_data
 
-    def _wait_response(self) -> tuple[bool, Any]:
+    async def _wait_response(self) -> tuple[bool, Any]:
         while True:
-            print(f'Polling for response...')
+            #print(f'Polling for response...')
             event = self.pdu_manager.poll_response(self.client_id)
 
             if self.pdu_manager.is_client_event_response_in(event):
@@ -127,7 +127,37 @@ class ProtocolClient:
                 return False, None
             
             if self.pdu_manager.is_client_event_none(event):
-                pass
+                await asyncio.sleep(0.01)
+
+
+
+    def _wait_response_nowait(self) -> tuple[bool, Any]:
+        while True:
+            #print(f'Polling for response...')
+            event = self.pdu_manager.poll_response(self.client_id)
+
+            if self.pdu_manager.is_client_event_response_in(event):
+                print(f"Response received successfully.")
+                res_pdu_data = self.pdu_manager.get_response(self.service_name, self.client_id)
+                response_data = self.res_decoder(res_pdu_data)
+                
+                if response_data.header.request_id != self._client_instance_last_request_id:
+                    print(f"Warning: Mismatched request_id. Expected {self._client_instance_last_request_id}, got {response_data.header.request_id}. Discarding.")
+                    continue
+
+                print(f"Decoded response data: {response_data}")
+                return False, response_data.body
+            
+            if self.pdu_manager.is_client_event_timeout(event):
+                print("Request timed out.")
+                return True, None
+
+            if self.pdu_manager.is_client_event_cancel_done(event):
+                print("Request successfully cancelled.")
+                return False, None
+            
+            if self.pdu_manager.is_client_event_none(event):
+                time.sleep(0.01)
 
     async def call(self, request_data: Any, timeout_msec: int = 1000, poll_interval: float = 0.01) -> Any:
         """
@@ -149,7 +179,7 @@ class ProtocolClient:
         print(f"Request sent successfully: {request_data}")
 
 
-        is_timeout, response_data = self._wait_response()
+        is_timeout, response_data = await self._wait_response()
         if is_timeout:
             await self.cancel()
             return None
@@ -175,7 +205,7 @@ class ProtocolClient:
         print(f"Request sent successfully: {request_data}")
 
 
-        is_timeout, response_data = self._wait_response()
+        is_timeout, response_data = self._wait_response_nowait()
         if is_timeout:
             self.cancel_nowait()
             return None
@@ -190,7 +220,7 @@ class ProtocolClient:
         
         if not await self.pdu_manager.cancel_request(self.client_id):
             raise Exception("Failed to cancel request.")
-        _, _ = self._wait_response()
+        _, _ = await self._wait_response()
         return True
 
     def cancel_nowait(self) -> bool:
@@ -202,7 +232,7 @@ class ProtocolClient:
 
         if not self.pdu_manager.cancel_request_nowait(self.client_id):
             raise Exception("Failed to cancel request.")
-        _, _ = self._wait_response()
+        _, _ = self._wait_response_nowait()
         return True
 
 

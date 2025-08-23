@@ -114,6 +114,7 @@ class RemotePduServiceManager(IPduServiceManager):
         )
         self._server_instance_client_registry.clients[body_pdu_data.header.client_name] = client_handle
 
+        print(f'[DEBUG] Registered RPC client: {body_pdu_data.header.client_name}')
         # 応答パケット作成
         register_client_res_packet: RegisterClientResponsePacket = RegisterClientResponsePacket()
         register_client_res_packet.header.request_id = 0
@@ -130,6 +131,7 @@ class RemotePduServiceManager(IPduServiceManager):
         raw_data = self._build_binary(PDU_DATA_RPC_REPLY, body_pdu_data.header.service_name, client_handle.response_channel_id, pdu_data)
         if not await self.comm_service.send_binary(raw_data):
             raise RuntimeError("Failed to send register client response")
+        print(f'[DEBUG] Sent register client response: {body_pdu_data.header.client_name}')
         return None
     
     async def handler(self, packet: DataPacket) -> None:
@@ -190,22 +192,26 @@ class RemotePduServiceManager(IPduServiceManager):
         raise NotImplementedError("poll_request_nowait is not implemented")
 
     async def poll_request(self) -> Event:
+        print(f"[DEBUG] poll_request start")
         if self._server_instance_client_name is not None:
             #複数のクライアントの同時リクエストはサポートしない
             return self.SERVER_API_EVENT_NONE
-        await asyncio.sleep(self._server_instance_delta_time_sec)
+        # await asyncio.sleep(self._server_instance_delta_time_sec)
         #クライアントレジストリを探索して、バッファチェックする
         if self._server_instance_client_registry is None:
             return self.SERVER_API_EVENT_NONE
         for client_name, client_handle in self._server_instance_client_registry.clients.items():
+            print(f"[DEBUG] poll_request: checking client {client_name}")
             if self.comm_buffer.contains_buffer(self._server_instance_service_name, client_name):
                 raw_data = self.comm_buffer.peek_buffer(self._server_instance_service_name, client_name)
                 request = self.req_decoder(raw_data)
                 self._server_instance_client_name = client_name
                 self._server_instance_request_id = request.header.request_id
+                print(f"[DEBUG] poll_request: request found for client {client_name}")
                 if request.header.opcode == self.CLIENT_API_OPCODE_CANCEL:
                     return self.SERVER_API_EVENT_REQUEST_CANCEL
                 return self.SERVER_API_EVENT_REQUEST_IN
+        print(f"[DEBUG] poll_request end: no request found")
         return self.SERVER_API_EVENT_NONE
 
     def get_request(self) -> Tuple[ClientId, PduData]:
@@ -322,7 +328,8 @@ class RemotePduServiceManager(IPduServiceManager):
 
 
     def poll_response(self, client_id: ClientId) -> Event:
-        self.sleep(self._client_instance_poll_interval_msec / 1000.0)  # ミリ秒から秒に変換
+        #self.sleep(self._client_instance_poll_interval_msec / 1000.0)  # ミリ秒から秒に変換
+        #print(f'[DEBUG] poll_response start: service {self._client_instance_service_name}, client {self._client_instance_client_name}')
         if self.comm_buffer.contains_buffer(self._client_instance_service_name, self._client_instance_client_name):
             raw_data = self.comm_buffer.peek_buffer(self._client_instance_service_name, self._client_instance_client_name)
             response = self.res_decoder(raw_data)
@@ -336,7 +343,7 @@ class RemotePduServiceManager(IPduServiceManager):
             return self.CLIENT_API_EVENT_REQUEST_TIMEOUT
         return self.CLIENT_API_EVENT_NONE
 
-    def get_response(self, client_id: ClientId) -> PduData:
+    def get_response(self, service_name: str, client_id: ClientId) -> PduData:
         if self.comm_buffer.contains_buffer(self._client_instance_service_name, self._client_instance_client_name):
             raw_data = self.comm_buffer.get_buffer(self._client_instance_service_name, self._client_instance_client_name)
             return raw_data
