@@ -11,14 +11,16 @@ from hakoniwa_pdu.rpc.remote.remote_pdu_service_server_manager import (
 from hakoniwa_pdu.rpc.remote.remote_pdu_service_client_manager import (
     RemotePduServiceClientManager,
 )
-from hakoniwa_pdu.rpc.protocol_client import ProtocolClient
-from hakoniwa_pdu.rpc.protocol_server import ProtocolServer
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import AddTwoIntsRequest
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponse import AddTwoIntsResponse
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequestPacket import AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponsePacket import AddTwoIntsResponsePacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsRequestPacket import pdu_to_py_AddTwoIntsRequestPacket, py_to_pdu_AddTwoIntsRequestPacket
-from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_AddTwoIntsResponsePacket import pdu_to_py_AddTwoIntsResponsePacket, py_to_pdu_AddTwoIntsResponsePacket
+from hakoniwa_pdu.rpc.auto_wire import (
+    make_protocol_client,
+    make_protocol_server,
+)
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsRequest import (
+    AddTwoIntsRequest,
+)
+from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_AddTwoIntsResponse import (
+    AddTwoIntsResponse,
+)
 
 OFFSET_PATH = "./tests/config/offset"
 
@@ -37,16 +39,11 @@ async def test_remote_rpc_call():
         "test_server", pdu_config_path, offset_path, server_comm, uri
     )
     server_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
-    protocol_server = ProtocolServer(
-        service_name="Service/Add",
-        max_clients=1,
+    protocol_server = make_protocol_server(
         pdu_manager=server_pdu_manager,
-        cls_req_packet=AddTwoIntsRequestPacket,
-        req_encoder=py_to_pdu_AddTwoIntsRequestPacket,
-        req_decoder=pdu_to_py_AddTwoIntsRequestPacket,
-        cls_res_packet=AddTwoIntsResponsePacket,
-        res_encoder=py_to_pdu_AddTwoIntsResponsePacket,
-        res_decoder=pdu_to_py_AddTwoIntsResponsePacket
+        service_name="Service/Add",
+        srv="AddTwoInts",
+        max_clients=1,
     )
 
     async def add_two_ints_handler(request: AddTwoIntsRequest) -> AddTwoIntsResponse:
@@ -63,16 +60,11 @@ async def test_remote_rpc_call():
         "test_client", pdu_config_path, offset_path, client_comm, uri
     )
     client_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
-    protocol_client = ProtocolClient(
+    protocol_client = make_protocol_client(
         pdu_manager=client_pdu_manager,
         service_name="Service/Add",
         client_name="test_client",
-        cls_req_packet=AddTwoIntsRequestPacket,
-        req_encoder=py_to_pdu_AddTwoIntsRequestPacket,
-        req_decoder=pdu_to_py_AddTwoIntsRequestPacket,
-        cls_res_packet=AddTwoIntsResponsePacket,
-        res_encoder=py_to_pdu_AddTwoIntsResponsePacket,
-        res_decoder=pdu_to_py_AddTwoIntsResponsePacket
+        srv="AddTwoInts",
     )
 
     # 2. Register client
