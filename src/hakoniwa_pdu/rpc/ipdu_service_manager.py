@@ -178,7 +178,11 @@ class IPduServiceServerManagerImmediate(IPduServiceServerManager):
         pass
 
     @abstractmethod
-    def poll_request(self) -> Event:
+    def poll_request(self) -> Tuple[Optional[str], Event]:
+        """チェックされたサービス名とイベントを返す。
+
+        処理中のリクエストが存在する場合は、他サービスのポーリングを行わず、
+        同一サービス名と ``NONE`` イベントのタプルを返す。"""
         pass
 
     @abstractmethod
@@ -218,7 +222,8 @@ class IPduServiceServerManagerBlocking(IPduServiceServerManager):
         pass
 
     @abstractmethod
-    async def poll_request(self) -> Event:
+    async def poll_request(self) -> Tuple[Optional[str], Event]:
+        """チェックされたサービス名とイベントを返す"""
         pass
 
     @abstractmethod

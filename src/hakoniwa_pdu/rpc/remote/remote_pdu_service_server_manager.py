@@ -59,26 +59,25 @@ class RemotePduServiceServerManager(
         uri: str,
     ) -> None:
         super().__init__(asset_name, pdu_config_path, offset_path, comm_service, uri)
-        self.client_registry: Optional[ClientRegistry] = None
-        self.service_name: Optional[str] = None
-        self.client_name: Optional[str] = None
+        # マルチサービス対応のためのレジストリと状態管理
+        self.service_registries: Dict[str, ClientRegistry] = {}
+        self.current_service_name: Optional[str] = None
+        self.current_client_name: Optional[str] = None
         self.request_id = 0
         comm_service.register_event_handler(self.handler)
 
     async def _handler_register_client(self, packet: DataPacket) -> None:
         body_raw_data = packet.body_data
         body_pdu_data = pdu_to_py_RegisterClientRequestPacket(body_raw_data)
-        service_id = self.service_config.get_service_index(
-            body_pdu_data.header.service_name
-        )
-        if self.client_registry is None:
-            self.client_registry = ClientRegistry()
-        if self.client_registry.clients.get(body_pdu_data.header.client_name) is not None:
+        service_name = body_pdu_data.header.service_name
+        service_id = self.service_config.get_service_index(service_name)
+        registry = self.service_registries.setdefault(service_name, ClientRegistry())
+        if registry.clients.get(body_pdu_data.header.client_name) is not None:
             raise ValueError(
-                f"Client registry for service '{body_pdu_data.header.service_name}' already exists"
+                f"Client registry for service '{service_name}' already exists"
             )
 
-        client_id = len(self.client_registry.clients)
+        client_id = len(registry.clients)
         request_channel_id = client_id * 2
         response_channel_id = client_id * 2 + 1
         client_handle = ClientHandle(
@@ -86,7 +85,7 @@ class RemotePduServiceServerManager(
             request_channel_id=request_channel_id,
             response_channel_id=response_channel_id,
         )
-        self.client_registry.clients[body_pdu_data.header.client_name] = client_handle
+        registry.clients[body_pdu_data.header.client_name] = client_handle
 
         print(f"[DEBUG] Registered RPC client: {body_pdu_data.header.client_name}")
         register_client_res_packet = RegisterClientResponsePacket()
@@ -110,7 +109,7 @@ class RemotePduServiceServerManager(
         pdu_data = py_to_pdu_RegisterClientResponsePacket(register_client_res_packet)
         raw_data = self._build_binary(
             PDU_DATA_RPC_REPLY,
-            body_pdu_data.header.service_name,
+            service_name,
             client_handle.response_channel_id,
             pdu_data,
         )
@@ -138,50 +137,60 @@ class RemotePduServiceServerManager(
             raise NotImplementedError("Unknown packet type")
 
     async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
-        offmap = offset_map.create_offmap(self.offset_path)
-        self.service_config = ServiceConfig(
-            self.service_config_path, offmap, hakopy=None
-        )
-        pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
-        self.pdu_config.update_pdudef(pdudef)
-        print("Service PDU definitions prepared.")
-        self.service_name = service_name
-        return await super().start_service(uri=self.uri)
+        if self.service_config is None:
+            offmap = offset_map.create_offmap(self.offset_path)
+            self.service_config = ServiceConfig(
+                self.service_config_path, offmap, hakopy=None
+            )
+            pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
+            self.pdu_config.update_pdudef(pdudef)
+            print("Service PDU definitions prepared.")
+            if not await super().start_service(uri=self.uri):
+                return False
+        self.service_registries.setdefault(service_name, ClientRegistry())
+        return True
 
     def get_response_buffer(
         self, client_id: ClientId, status: int, result_code: int
     ) -> Optional[PduData]:
         py_pdu_data: PyPduData = self.cls_res_packet()
         py_pdu_data.header.request_id = self.request_id
-        py_pdu_data.header.service_name = self.service_name
-        py_pdu_data.header.client_name = self.client_name
+        py_pdu_data.header.service_name = self.current_service_name
+        py_pdu_data.header.client_name = self.current_client_name
         py_pdu_data.header.status = status
         py_pdu_data.header.processing_percentage = 100
         py_pdu_data.header.result_code = result_code
         return self.res_encoder(py_pdu_data)
-
-    async def poll_request(self) -> Event:
-        if self.client_name is not None:
-            return self.SERVER_API_EVENT_NONE
-        if self.client_registry is None:
-            return self.SERVER_API_EVENT_NONE
-        for client_name, _handle in self.client_registry.clients.items():
-            if self.comm_buffer.contains_buffer(self.service_name, client_name):
-                raw_data = self.comm_buffer.peek_buffer(self.service_name, client_name)
-                request = self.req_decoder(raw_data)
-                self.client_name = client_name
-                self.request_id = request.header.request_id
-                if request.header.opcode == self.CLIENT_API_OPCODE_CANCEL:
-                    return self.SERVER_API_EVENT_REQUEST_CANCEL
-                return self.SERVER_API_EVENT_REQUEST_IN
-        return self.SERVER_API_EVENT_NONE
+    async def poll_request(self) -> Tuple[Optional[str], Event]:
+        if self.current_client_name is not None:
+            return self.current_service_name, self.SERVER_API_EVENT_NONE
+        for service_name, registry in self.service_registries.items():
+            for client_name, _handle in registry.clients.items():
+                if self.comm_buffer.contains_buffer(service_name, client_name):
+                    raw_data = self.comm_buffer.peek_buffer(service_name, client_name)
+                    request = self.req_decoder(raw_data)
+                    self.current_client_name = client_name
+                    self.current_service_name = service_name
+                    self.request_id = request.header.request_id
+                    if request.header.opcode == self.CLIENT_API_OPCODE_CANCEL:
+                        return service_name, self.SERVER_API_EVENT_REQUEST_CANCEL
+                    return service_name, self.SERVER_API_EVENT_REQUEST_IN
+        return None, self.SERVER_API_EVENT_NONE
 
     def get_request(self) -> Tuple[ClientId, PduData]:
-        if self.comm_buffer.contains_buffer(self.service_name, self.client_name):
-            raw_data = self.comm_buffer.get_buffer(
-                self.service_name, self.client_name
+        if (
+            self.current_service_name
+            and self.current_client_name
+            and self.comm_buffer.contains_buffer(
+                self.current_service_name, self.current_client_name
             )
-            client_handle = self.client_registry.clients[self.client_name]
+        ):
+            raw_data = self.comm_buffer.get_buffer(
+                self.current_service_name, self.current_client_name
+            )
+            client_handle = self.service_registries[self.current_service_name].clients[
+                self.current_client_name
+            ]
             return client_handle, raw_data
         raise RuntimeError("No response data available. Call poll_request() first.")
 
@@ -189,15 +198,17 @@ class RemotePduServiceServerManager(
         client_handle: ClientHandle = client_id
         raw_data = self._build_binary(
             PDU_DATA_RPC_REPLY,
-            self.service_name,
+            self.current_service_name,
             client_handle.request_channel_id,
             pdu_data,
         )
         if not await self.comm_service.send_binary(raw_data):
-            self.client_name = None
+            self.current_client_name = None
+            self.current_service_name = None
             self.request_id = None
             return False
-        self.client_name = None
+        self.current_client_name = None
+        self.current_service_name = None
         self.request_id = None
         return True
 
@@ -211,15 +222,17 @@ class RemotePduServiceServerManager(
         cancel_pdu_raw_data = self.res_encoder(cancel_pdu_data)
         raw_data = self._build_binary(
             PDU_DATA_RPC_REPLY,
-            self.service_name,
+            self.current_service_name,
             client_handle.request_channel_id,
             cancel_pdu_raw_data,
         )
         if not await self.comm_service.send_binary(raw_data):
-            self.client_name = None
+            self.current_client_name = None
+            self.current_service_name = None
             self.request_id = None
             return False
-        self.client_name = None
+        self.current_client_name = None
+        self.current_service_name = None
         self.request_id = None
         return True
 
