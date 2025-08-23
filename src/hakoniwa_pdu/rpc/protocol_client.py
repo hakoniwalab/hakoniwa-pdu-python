@@ -1,13 +1,31 @@
 import asyncio
 
-from typing import Any, Callable, Type, Optional
-from .ipdu_service_manager import IPduServiceManager, ClientId
+from typing import Any, Callable, Type, Optional, Union
+from .ipdu_service_manager import (
+    IPduServiceManagerImmediate,
+    IPduServiceManagerBlocking,
+    ClientId,
+)
 import time
+PduManagerType = Union[IPduServiceManagerImmediate, IPduServiceManagerBlocking]
+
+
 class ProtocolClient:
     """
     IPduServiceManagerを介してクライアントのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, pdu_manager: IPduServiceManager, service_name: str, client_name: str, cls_req_packet: Type[Any], req_encoder: Callable, req_decoder: Callable, cls_res_packet: Type[Any], res_encoder: Callable, res_decoder: Callable):
+    def __init__(
+        self,
+        pdu_manager: PduManagerType,
+        service_name: str,
+        client_name: str,
+        cls_req_packet: Type[Any],
+        req_encoder: Callable,
+        req_decoder: Callable,
+        cls_res_packet: Type[Any],
+        res_encoder: Callable,
+        res_decoder: Callable,
+    ):
         """
         クライアントプロトコルハンドラを初期化する。
 
@@ -45,7 +63,7 @@ class ProtocolClient:
         Returns:
             登録に成功した場合はTrue。
         """
-        self.client_id = self.pdu_manager.register_client_nowait(self.service_name, self.client_name)
+        self.client_id = self.pdu_manager.register_client(self.service_name, self.client_name)
         if self.client_id is not None:
             print(f"Client '{self.client_name}' registered with service '{self.service_name}' (ID: {self.client_id})")
             return True
@@ -199,7 +217,7 @@ class ProtocolClient:
         """
         req_pdu_data = self._create_request_packet(request_data, poll_interval)
 
-        if not self.pdu_manager.call_request_nowait(self.client_id, req_pdu_data, timeout_msec):
+        if not self.pdu_manager.call_request(self.client_id, req_pdu_data, timeout_msec):
             print("Failed to send request.")
             return None
         print(f"Request sent successfully: {request_data}")
@@ -230,7 +248,7 @@ class ProtocolClient:
         if self.client_id is None:
             raise RuntimeError("Client is not registered.")
 
-        if not self.pdu_manager.cancel_request_nowait(self.client_id):
+        if not self.pdu_manager.cancel_request(self.client_id):
             raise Exception("Failed to cancel request.")
         _, _ = self._wait_response_nowait()
         return True

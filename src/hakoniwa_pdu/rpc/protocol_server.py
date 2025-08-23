@@ -1,16 +1,33 @@
 import asyncio
 import time
-from typing import Callable, Awaitable, Any, Type
-from .ipdu_service_manager import IPduServiceManager
+from typing import Callable, Awaitable, Any, Type, Union
+from .ipdu_service_manager import (
+    IPduServiceManagerImmediate,
+    IPduServiceManagerBlocking,
+)
 
 # リクエストハンドラの型定義: async def handler(request) -> response
 RequestHandler = Callable[[Any], Awaitable[Any]]
+
+PduManagerType = Union[IPduServiceManagerImmediate, IPduServiceManagerBlocking]
+
 
 class ProtocolServer:
     """
     IPduServiceManagerを介してサーバーのRPCプロトコルを処理するクラス。
     """
-    def __init__(self, service_name: str, max_clients: int, pdu_manager: IPduServiceManager, cls_req_packet: Type[Any], req_encoder: Callable, req_decoder: Callable, cls_res_packet: Type[Any], res_encoder: Callable, res_decoder: Callable):
+    def __init__(
+        self,
+        service_name: str,
+        max_clients: int,
+        pdu_manager: PduManagerType,
+        cls_req_packet: Type[Any],
+        req_encoder: Callable,
+        req_decoder: Callable,
+        cls_res_packet: Type[Any],
+        res_encoder: Callable,
+        res_decoder: Callable,
+    ):
         self.service_name = service_name
         self.max_clients = max_clients
         self.pdu_manager = pdu_manager
@@ -28,7 +45,7 @@ class ProtocolServer:
         return await self.pdu_manager.start_rpc_service(self.service_name, max_clients=self.max_clients)
     
     def start_service_nowait(self) -> bool:
-        return self.pdu_manager.start_rpc_service_nowait(self.service_name, max_clients=self.max_clients)
+        return self.pdu_manager.start_rpc_service(self.service_name, max_clients=self.max_clients)
 
     async def _handle_request(self, client_id: Any, req_pdu_data: bytes, handler: RequestHandler) -> bytes:
         """リクエスト処理の共通ロジック"""
@@ -85,14 +102,14 @@ class ProtocolServer:
         self._is_serving = True
         print("Server protocol started (nowait)...")
         while self._is_serving:
-            event = self.pdu_manager.poll_request_nowait()
+            event = self.pdu_manager.poll_request()
 
             if self.pdu_manager.is_server_event_request_in(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
                 print(f"Request received from client {client_id}")
                 try:
                     res_pdu_data = asyncio.run(self._handle_request(client_id, req_pdu_data, handler))
-                    self.pdu_manager.put_response_nowait(client_id, res_pdu_data)
+                    self.pdu_manager.put_response(client_id, res_pdu_data)
                     print(f"Response sent to client {client_id}")
                 except Exception as e:
                     print(f"Error processing request from client {client_id}: {e}")
@@ -101,7 +118,7 @@ class ProtocolServer:
                 client_id, req_pdu_data = self.pdu_manager.get_request()
                 print(f"Cancel request received from client {client_id}")
                 try:
-                    self.pdu_manager.put_cancel_response_nowait(client_id, None)
+                    self.pdu_manager.put_cancel_response(client_id, None)
                     print(f"Cancel response sent to client {client_id}")
                 except Exception as e:
                     print(f"Error processing cancel request from client {client_id}: {e}")

@@ -1,6 +1,8 @@
 # hakoniwa-pdu-python
 
-This is a Python PDU communication library for the Hakoniwa simulator.  
+[![tests](https://github.com/hakoniwalab/hakoniwa-pdu-python/actions/workflows/tests.yml/badge.svg)](https://github.com/hakoniwalab/hakoniwa-pdu-python/actions/workflows/tests.yml)
+
+This is a Python PDU communication library for the Hakoniwa simulator.
 It allows easy sending/receiving of PDU binary data and conversion to/from JSON over WebSocket.
 
 ---
