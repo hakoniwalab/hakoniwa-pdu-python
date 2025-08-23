@@ -16,6 +16,21 @@
                     "baseSize": 288
                 }
             }
+        },
+        {
+            "name": "Service/SystemControl",
+            "type": "hako_srv_msgs/SystemControl",
+            "maxClients": 1,
+            "pduSize": {
+                "server": {
+                    "heapSize": 0,
+                    "baseSize": 280
+                },
+                "client": {
+                    "heapSize": 0,
+                    "baseSize": 408
+                }
+            }
         }
     ],
     "nodes": [
