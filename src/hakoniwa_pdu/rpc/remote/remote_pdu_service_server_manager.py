@@ -201,7 +201,7 @@ class RemotePduServiceServerManager(
         raw_data = self._build_binary(
             PDU_DATA_RPC_REPLY,
             self.current_service_name,
-            client_handle.request_channel_id,
+            client_handle.response_channel_id,
             pdu_data,
         )
         if not await self.comm_service.send_binary(raw_data):
@@ -225,7 +225,7 @@ class RemotePduServiceServerManager(
         raw_data = self._build_binary(
             PDU_DATA_RPC_REPLY,
             self.current_service_name,
-            client_handle.request_channel_id,
+            client_handle.response_channel_id,
             cancel_pdu_raw_data,
         )
         if not await self.comm_service.send_binary(raw_data):

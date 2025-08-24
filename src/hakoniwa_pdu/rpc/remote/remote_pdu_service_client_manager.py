@@ -58,6 +58,10 @@ class RemotePduServiceClientManager(
     async def register_client(
         self, service_name: str, client_name: str, timeout: float = 1.0
     ) -> Optional[ClientId]:
+        if self.service_config_path is None:
+            raise RuntimeError(
+                "service_config_path is not set. Call initialize_services() first."
+            )
         self.service_name = service_name
         self.client_name = client_name
         offmap = offset_map.create_offmap(self.offset_path)
@@ -149,13 +153,20 @@ class RemotePduServiceClientManager(
         raise RuntimeError("No response data available. Call poll_response() first.")
 
     async def cancel_request(self, client_id: ClientId) -> bool:
+        client_info: RegisterClientResponse = client_id
         py_pdu_data = self.req_decoder(self.request_buffer)
         py_pdu_data.header.opcode = self.CLIENT_API_OPCODE_CANCEL
-        py_pdu_data.header.poll_interval_msec = -1
+        py_pdu_data.header.status_poll_interval_msec = -1
         pdu_data = self.req_encoder(py_pdu_data)
-        if not await self.comm_service.send_binary(pdu_data):
+        raw_data = self._build_binary(
+            PDU_DATA_RPC_REQUEST,
+            self.service_name,
+            client_info.request_channel_id,
+            pdu_data,
+        )
+        if not await self.comm_service.send_binary(raw_data):
             return False
-        self.request_buffer = pdu_data
+        self.request_buffer = raw_data
         return True
 
     def is_client_event_response_in(self, event: Event) -> bool:
