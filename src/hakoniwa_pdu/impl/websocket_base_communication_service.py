@@ -4,7 +4,7 @@ from typing import Optional, Callable, Union, Awaitable
 from websockets import WebSocketClientProtocol, WebSocketServerProtocol
 
 from .communication_buffer import CommunicationBuffer
-from .data_packet import DataPacket, PDU_DATA, PDU_DATA_RPC_REQUEST, PDU_DATA_RPC_REPLY, DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_CLIENT
+from .data_packet import DataPacket, PDU_DATA, PDU_DATA_RPC_REQUEST, PDU_DATA_RPC_REPLY, DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REQUEST_PDU_READ, REGISTER_RPC_CLIENT
 from .icommunication_service import ICommunicationService
 from .pdu_channel_config import PduChannelConfig
 from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_ServiceRequestHeader import (
@@ -131,7 +131,7 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                     elif (
                         packet
                         and packet.meta_pdu.meta_request_type
-                        in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REGISTER_RPC_CLIENT]
+                        in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REQUEST_PDU_READ, REGISTER_RPC_CLIENT]
                     ):
                         print(f"[DEBUG] _receive_loop_v2: handling packet {packet.meta_pdu.meta_request_type}")
                         if self.handler is None:

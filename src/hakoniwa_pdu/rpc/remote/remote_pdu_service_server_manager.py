@@ -16,6 +16,7 @@ from hakoniwa_pdu.impl.data_packet import (
     DataPacket,
     DECLARE_PDU_FOR_READ,
     DECLARE_PDU_FOR_WRITE,
+    REQUEST_PDU_READ,
     REGISTER_RPC_CLIENT,
     PDU_DATA_RPC_REPLY,
 )
@@ -120,15 +121,32 @@ class RemotePduServiceServerManager(
             f"[DEBUG] Sent register client response: {body_pdu_data.header.client_name}"
         )
 
+    def register_handler_pdu_for_read(self, handler: Callable) -> None:
+        self.pdu_for_read_handler = handler
+    def register_handler_pdu_for_write(self, handler: Callable) -> None:
+        self.pdu_for_write_handler = handler
+    def register_handler_request_pdu_read(self, handler: Callable) -> None:
+        self.request_pdu_read_handler = handler
+
     async def handler(self, packet: DataPacket) -> None:
         if packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_READ:
             print(
                 f"Declare PDU for read: {packet.robot_name}, channel_id={packet.channel_id}"
             )
+            if self.pdu_for_read_handler is not None:
+                self.pdu_for_read_handler(packet)
         elif packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_WRITE:
             print(
                 f"Declare PDU for write: {packet.robot_name}, channel_id={packet.channel_id}"
             )
+            if self.pdu_for_write_handler is not None:
+                self.pdu_for_write_handler(packet)
+        elif packet.meta_pdu.meta_request_type == REQUEST_PDU_READ:
+            print(
+                f"Request PDU for read: {packet.robot_name}, channel_id={packet.channel_id}"
+            )
+            if self.request_pdu_read_handler is not None:
+                self.request_pdu_read_handler(packet)
         elif packet.meta_pdu.meta_request_type == REGISTER_RPC_CLIENT:
             print(
                 f"Register RPC client: {packet.robot_name}, channel_id={packet.channel_id}"
