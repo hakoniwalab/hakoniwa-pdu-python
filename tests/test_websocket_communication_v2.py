@@ -54,6 +54,36 @@ async def test_websocket_client_server_communication_v2():
     await client_comm.stop_service()
     await server_comm.stop_service()
 
+
+@pytest.mark.asyncio
+async def test_websocket_client_disconnect_and_reconnect_v2():
+    uri = "ws://localhost:8771"
+    pdu_config_path = "tests/pdu_config.json"
+    pdu_channel_config = PduChannelConfig(pdu_config_path)
+
+    server_comm = WebSocketServerCommunicationService(version="v2")
+    server_buffer = CommunicationBuffer(pdu_channel_config)
+    assert await server_comm.start_service(server_buffer, uri) is True
+
+    first_client = WebSocketCommunicationService(version="v2")
+    first_buffer = CommunicationBuffer(pdu_channel_config)
+    assert await first_client.start_service(first_buffer, uri) is True
+    await asyncio.sleep(0.1)
+    assert len(server_comm.clients) == 1
+
+    await first_client.stop_service()
+    await asyncio.sleep(0.1)
+    assert len(server_comm.clients) == 0
+
+    second_client = WebSocketCommunicationService(version="v2")
+    second_buffer = CommunicationBuffer(pdu_channel_config)
+    assert await second_client.start_service(second_buffer, uri) is True
+    await asyncio.sleep(0.1)
+    assert len(server_comm.clients) == 1
+
+    await second_client.stop_service()
+    await server_comm.stop_service()
+
 @pytest.mark.asyncio
 async def test_websocket_declare_pdu_for_read_v2():
     # 1. Setup
