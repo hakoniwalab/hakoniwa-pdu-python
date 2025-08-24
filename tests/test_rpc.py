@@ -259,3 +259,99 @@ async def test_remote_system_control_rpc_call():
     server_task.cancel()
     await client_comm.stop_service()
     await server_comm.stop_service()
+
+
+@pytest.mark.asyncio
+async def test_remote_rpc_call_timeout():
+    uri = "ws://localhost:8773"
+    pdu_config_path = "tests/pdu_config.json"
+    service_config_path = "examples/service.json"
+    offset_path = OFFSET_PATH
+
+    server_comm = WebSocketServerCommunicationService(version="v2")
+    server_pdu_manager = RemotePduServiceServerManager(
+        "test_server", pdu_config_path, offset_path, server_comm, uri
+    )
+    server_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
+    protocol_server = make_protocol_server(
+        pdu_manager=server_pdu_manager,
+        service_name="Service/Add",
+        srv="AddTwoInts",
+        max_clients=1,
+    )
+    await protocol_server.start_service()
+
+    client_comm = WebSocketCommunicationService(version="v2")
+    client_pdu_manager = RemotePduServiceClientManager(
+        "test_client", pdu_config_path, offset_path, client_comm, uri
+    )
+    client_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
+    protocol_client = make_protocol_client(
+        pdu_manager=client_pdu_manager,
+        service_name="Service/Add",
+        client_name="test_client",
+        srv="AddTwoInts",
+    )
+
+    assert await protocol_client.start_service(uri)
+    assert await protocol_client.register()
+
+    req = AddTwoIntsRequest()
+    req.a = 1
+    req.b = 2
+
+    pdu_data = protocol_client._create_request_packet(req, 0.01)
+    assert await client_pdu_manager.call_request(
+        protocol_client.client_id, pdu_data, timeout_msec=100
+    )
+
+    event = client_pdu_manager.CLIENT_API_EVENT_NONE
+    while event == client_pdu_manager.CLIENT_API_EVENT_NONE:
+        event = client_pdu_manager.poll_response(protocol_client.client_id)
+        await asyncio.sleep(0.05)
+    assert client_pdu_manager.is_client_event_timeout(event)
+
+    await client_comm.stop_service()
+    await server_comm.stop_service()
+
+
+@pytest.mark.asyncio
+async def test_remote_rpc_cancel_not_implemented():
+    uri = "ws://localhost:8774"
+    pdu_config_path = "tests/pdu_config.json"
+    service_config_path = "examples/service.json"
+    offset_path = OFFSET_PATH
+
+    server_comm = WebSocketServerCommunicationService(version="v2")
+    server_pdu_manager = RemotePduServiceServerManager(
+        "test_server", pdu_config_path, offset_path, server_comm, uri
+    )
+    server_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
+    protocol_server = make_protocol_server(
+        pdu_manager=server_pdu_manager,
+        service_name="Service/Add",
+        srv="AddTwoInts",
+        max_clients=1,
+    )
+    await protocol_server.start_service()
+
+    client_comm = WebSocketCommunicationService(version="v2")
+    client_pdu_manager = RemotePduServiceClientManager(
+        "test_client", pdu_config_path, offset_path, client_comm, uri
+    )
+    client_pdu_manager.initialize_services(service_config_path, 1000 * 1000)
+    protocol_client = make_protocol_client(
+        pdu_manager=client_pdu_manager,
+        service_name="Service/Add",
+        client_name="test_client",
+        srv="AddTwoInts",
+    )
+
+    assert await protocol_client.start_service(uri)
+    assert await protocol_client.register()
+
+    with pytest.raises(NotImplementedError):
+        await protocol_client.cancel()
+
+    await client_comm.stop_service()
+    await server_comm.stop_service()

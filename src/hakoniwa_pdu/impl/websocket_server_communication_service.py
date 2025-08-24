@@ -1,5 +1,6 @@
 import asyncio
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Dict, Optional
 from urllib.parse import urlparse
 
 import websockets
@@ -9,12 +10,31 @@ from .communication_buffer import CommunicationBuffer
 from .websocket_base_communication_service import WebSocketBaseCommunicationService
 
 
+@dataclass
+class ClientSession:
+    """Session information for a connected WebSocket client."""
+
+    client_id: str
+    websocket: WebSocketServerProtocol
+    name: Optional[str] = None
+    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
 class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
     """WebSocketベースのサーバ通信サービス."""
 
     def __init__(self, version: str = "v1"):
         super().__init__(version)
         self.server: Optional[websockets.server.Serve] = None
+        # Store active client sessions; still single-client by default
+        self.clients: Dict[str, ClientSession] = {}
+
+    def _remove_client(self, websocket: WebSocketServerProtocol) -> None:
+        """Remove client session associated with ``websocket``."""
+        client_id = f"client_{id(websocket)}"
+        self.clients.pop(client_id, None)
+        if self.websocket is websocket:
+            self.websocket = None
 
     async def start_service(
         self,
@@ -69,11 +89,27 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
             await websocket.close()
             return
         self.websocket = websocket
+        client_id = f"client_{id(websocket)}"
+        self.clients[client_id] = ClientSession(client_id, websocket)
         try:
             if self.version == "v1":
                 await self._receive_loop_v1(websocket)
             else:
                 await self._receive_loop_v2(websocket)
         finally:
-            self.websocket = None
+            self._remove_client(websocket)
+
+    async def send_data(
+        self, robot_name: str, channel_id: int, pdu_data: bytearray
+    ) -> bool:
+        success = await super().send_data(robot_name, channel_id, pdu_data)
+        if not success and self.websocket and self.websocket.closed:
+            self._remove_client(self.websocket)
+        return success
+
+    async def send_binary(self, raw_data: bytearray) -> bool:
+        success = await super().send_binary(raw_data)
+        if not success and self.websocket and self.websocket.closed:
+            self._remove_client(self.websocket)
+        return success
 
