@@ -23,6 +23,7 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceResponseHeader import (
 
 class WebSocketBaseCommunicationService(ICommunicationService):
     def __init__(self, version: str = "v1"):
+        print(f"[INFO] WebSocketBaseCommunicationService created with version: {version}")
         self.websocket: Optional[
             Union[WebSocketClientProtocol, WebSocketServerProtocol]
         ] = None

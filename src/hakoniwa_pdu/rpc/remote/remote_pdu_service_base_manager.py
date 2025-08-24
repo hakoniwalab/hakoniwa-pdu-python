@@ -18,7 +18,7 @@ class RemotePduServiceBaseManager(IPduServiceManager):
         comm_service: ICommunicationService,
         uri: str,
     ) -> None:
-        super().__init__()
+        super().__init__(wire_version=comm_service.version)
         self.asset_name = asset_name
         self.offset_path = offset_path
         self.uri = uri

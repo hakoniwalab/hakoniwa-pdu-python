@@ -9,6 +9,7 @@ from .websocket_base_communication_service import WebSocketBaseCommunicationServ
 
 class WebSocketCommunicationService(WebSocketBaseCommunicationService):
     def __init__(self, version: str = "v1"):
+        print(f"[INFO] WebSocketCommunicationService created with version: {version}")
         super().__init__(version)
 
     async def start_service(

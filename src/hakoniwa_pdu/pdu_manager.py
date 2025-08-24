@@ -59,6 +59,7 @@ class PduManager:
         self.b_is_initialized = False
         self.b_last_known_service_state = False
         self.wire_version = wire_version  # "v1" or "v2"
+        print(f"[INFO] PduManager created with wire version: {self.wire_version}")
 
     def get_default_offset_path(self) -> str:
         # インストール済パッケージ内の offset ディレクトリパスを取得

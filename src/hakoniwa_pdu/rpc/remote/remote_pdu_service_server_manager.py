@@ -67,6 +67,8 @@ class RemotePduServiceServerManager(
         self.request_id = 0
         self.req_decoders: Dict[str, Callable] = {}
         comm_service.register_event_handler(self.handler)
+        self.topic_service_started = False
+        self.rpc_service_started = False
 
     async def _handler_register_client(self, packet: DataPacket) -> None:
         body_raw_data = packet.body_data
@@ -155,7 +157,26 @@ class RemotePduServiceServerManager(
         else:
             raise NotImplementedError("Unknown packet type")
 
+    async def start_topic_service(self) -> bool:
+        if self.rpc_service_started:
+            raise RuntimeError("Cannot start topic service after RPC service has started")
+        
+        offmap = offset_map.create_offmap(self.offset_path)
+        self.service_config = ServiceConfig(
+            self.service_config_path, offmap, hakopy=None
+        )
+        pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
+        self.pdu_config.update_pdudef(pdudef)
+        print("Service PDU definitions prepared.")
+        if self.topic_service_started or not await super().start_service(uri=self.uri):
+            return False
+        self.topic_service_started = True
+        return True
+
     async def start_rpc_service(self, service_name: str, max_clients: int) -> bool:
+        if self.topic_service_started:
+            raise RuntimeError("Cannot start RPC service after topic service has started")
+        self.rpc_service_started = True
         if self.service_config is None:
             offmap = offset_map.create_offmap(self.offset_path)
             self.service_config = ServiceConfig(

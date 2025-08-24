@@ -55,6 +55,9 @@ class RemotePduServiceClientManager(
         self.request_buffer: Optional[bytes] = None
         self.poll_interval_msec: Optional[int] = None
 
+    async def start_client_service(self) -> bool:
+        return await super().start_service(uri=self.uri)
+
     async def register_client(
         self, service_name: str, client_name: str, timeout: float = 1.0
     ) -> Optional[ClientId]:
