@@ -161,6 +161,7 @@ class RemotePduServiceServerManager(
         py_pdu_data.header.status = status
         py_pdu_data.header.processing_percentage = 100
         py_pdu_data.header.result_code = result_code
+        print(f"[DEBUG] Sending response: {py_pdu_data}")
         return self.res_encoder(py_pdu_data)
     async def poll_request(self) -> Tuple[Optional[str], Event]:
         if self.current_client_name is not None:
@@ -217,22 +218,26 @@ class RemotePduServiceServerManager(
     async def put_cancel_response(
         self, client_id: ClientId, pdu_data: PduData
     ) -> bool:
+        # TODO
+        raise NotImplementedError("put_cancel_response is not implemented yet.")
         client_handle: ClientHandle = client_id
-        cancel_pdu_data = self.get_response_buffer(
+        print("Sending cancel response")
+        cancel_pdu_raw_data = self.get_response_buffer(
             None, self.API_STATUS_DONE, self.API_RESULT_CODE_CANCELED
         )
-        cancel_pdu_raw_data = self.res_encoder(cancel_pdu_data)
         raw_data = self._build_binary(
             PDU_DATA_RPC_REPLY,
             self.current_service_name,
             client_handle.response_channel_id,
             cancel_pdu_raw_data,
         )
+        print('before sending cancel response')
         if not await self.comm_service.send_binary(raw_data):
             self.current_client_name = None
             self.current_service_name = None
             self.request_id = None
             return False
+        print('after sending cancel response')
         self.current_client_name = None
         self.current_service_name = None
         self.request_id = None

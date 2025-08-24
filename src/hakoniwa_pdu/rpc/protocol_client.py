@@ -147,6 +147,7 @@ class ProtocolClientBlocking(ProtocolClientBase):
 
         is_timeout, response_data = await self._wait_response()
         if is_timeout:
+            print("Request timed out.")
             await self.cancel()
             return None
         return response_data

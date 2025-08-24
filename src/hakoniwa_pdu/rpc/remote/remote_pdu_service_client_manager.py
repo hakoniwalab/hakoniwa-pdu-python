@@ -106,6 +106,8 @@ class RemotePduServiceClientManager(
     async def call_request(
         self, client_id: ClientId, pdu_data: PduData, timeout_msec: int
     ) -> bool:
+        if self.request_buffer is not None:
+            raise RuntimeError("A request is already in progress.")
         self.timeout_msec = timeout_msec
         self.call_start_time_msec = int(time.time() * 1000)
         client_info: RegisterClientResponse = client_id
@@ -115,9 +117,10 @@ class RemotePduServiceClientManager(
             client_info.request_channel_id,
             pdu_data,
         )
+        print(f'[DEBUG] call_request: sending call request: meta={len(raw_data)} bytes')
         if not await self.comm_service.send_binary(raw_data):
             return False
-        self.request_buffer = raw_data
+        self.request_buffer = pdu_data
         return True
 
     def get_request_buffer(
@@ -138,8 +141,10 @@ class RemotePduServiceClientManager(
             response = self.res_decoder(raw_data)
             if response.header.result_code == self.API_RESULT_CODE_CANCELED:
                 self.request_id += 1
+                self.request_buffer = None
                 return self.CLIENT_API_EVENT_REQUEST_CANCEL_DONE
             self.request_id += 1
+            self.request_buffer = None
             return self.CLIENT_API_EVENT_RESPONSE_IN
         current_time_msec = int(time.time() * 1000)
         if (current_time_msec - self.call_start_time_msec) > self.timeout_msec:
@@ -153,10 +158,16 @@ class RemotePduServiceClientManager(
         raise RuntimeError("No response data available. Call poll_response() first.")
 
     async def cancel_request(self, client_id: ClientId) -> bool:
+        #TODO
+        raise NotImplementedError("cancel_request is not implemented yet.")
+        if self.request_buffer is None:
+            raise RuntimeError("No request in progress.")
         client_info: RegisterClientResponse = client_id
         py_pdu_data = self.req_decoder(self.request_buffer)
         py_pdu_data.header.opcode = self.CLIENT_API_OPCODE_CANCEL
         py_pdu_data.header.status_poll_interval_msec = -1
+        print(f'cancel service name: {py_pdu_data.header.service_name}')
+        print(f'cancel client name: {py_pdu_data.header.client_name}')
         pdu_data = self.req_encoder(py_pdu_data)
         raw_data = self._build_binary(
             PDU_DATA_RPC_REQUEST,
@@ -164,6 +175,7 @@ class RemotePduServiceClientManager(
             client_info.request_channel_id,
             pdu_data,
         )
+        print(f'[DEBUG] call_request: sending cancel request: meta={len(raw_data)} bytes')
         if not await self.comm_service.send_binary(raw_data):
             return False
         self.request_buffer = raw_data

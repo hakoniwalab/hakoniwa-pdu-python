@@ -113,10 +113,11 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                     if packet and self.comm_buffer and packet.meta_pdu.meta_request_type in [PDU_DATA]:
                         self.comm_buffer.put_packet(packet)
                     elif packet and packet.meta_pdu.meta_request_type in [PDU_DATA_RPC_REQUEST]:
+                        print(f'[DEBUG] _receive_loop_v2: handling RPC request: meta={packet.meta_pdu.robot_name}')
                         header: ServiceRequestHeader = pdu_to_py_ServiceRequestHeader(
                             packet.get_pdu_data()
                         )
-                        print(f"[DEBUG] _receive_loop_v2: handling RPC request {header.service_name}, {header.client_name}")
+                        print(f"[DEBUG] _receive_loop_v2: handling RPC request service_name={header.service_name}, client_name={header.client_name}")
                         self.comm_buffer.put_rpc_packet(
                             header.service_name, header.client_name, packet.get_pdu_data()
                         )

@@ -147,20 +147,21 @@ class ProtocolServerBlocking(ProtocolServerBase):
         self._is_serving = True
         while self._is_serving:
             service_name, event = await self.pdu_manager.poll_request()
-            ctx = self.services.get(service_name)
-            if ctx is None:
-                if self.pdu_manager.is_server_event_none(event):
-                    await asyncio.sleep(poll_interval)
-                else:
-                    print(f"Unhandled server event: {event}")
-                continue
+            if service_name is not None:
+                ctx = self.services.get(service_name)
+                if ctx is None:
+                    if self.pdu_manager.is_server_event_none(event):
+                        await asyncio.sleep(poll_interval)
+                    else:
+                        print(f"Unhandled server event: {event}")
+                    continue
 
-            self.pdu_manager.register_req_serializer(
-                ctx.cls_req_packet, ctx.req_encoder, ctx.req_decoder
-            )
-            self.pdu_manager.register_res_serializer(
-                ctx.cls_res_packet, ctx.res_encoder, ctx.res_decoder
-            )
+                self.pdu_manager.register_req_serializer(
+                    ctx.cls_req_packet, ctx.req_encoder, ctx.req_decoder
+                )
+                self.pdu_manager.register_res_serializer(
+                    ctx.cls_res_packet, ctx.res_encoder, ctx.res_decoder
+                )
 
             if self.pdu_manager.is_server_event_request_in(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
@@ -174,7 +175,9 @@ class ProtocolServerBlocking(ProtocolServerBase):
             elif self.pdu_manager.is_server_event_cancel(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
                 try:
+                    print(f'before cancel request from client {client_id}')
                     await self.pdu_manager.put_cancel_response(client_id, None)
+                    print(f'after cancel request from client {client_id}')
                 except Exception as e:
                     print(f"Error processing cancel request from client {client_id}: {e}")
             elif self.pdu_manager.is_server_event_none(event):
@@ -231,20 +234,21 @@ class ProtocolServerImmediate(ProtocolServerBase):
         self._is_serving = True
         while self._is_serving:
             service_name, event = self.pdu_manager.poll_request()
-            ctx = self.services.get(service_name)
-            if ctx is None:
-                if self.pdu_manager.is_server_event_none(event):
-                    time.sleep(poll_interval)
-                else:
-                    print(f"Unhandled server event: {event}")
-                continue
+            if service_name is not None:
+                ctx = self.services.get(service_name)
+                if ctx is None:
+                    if self.pdu_manager.is_server_event_none(event):
+                        time.sleep(poll_interval)
+                    else:
+                        print(f"Unhandled server event: {event}")
+                    continue
 
-            self.pdu_manager.register_req_serializer(
-                ctx.cls_req_packet, ctx.req_encoder, ctx.req_decoder
-            )
-            self.pdu_manager.register_res_serializer(
-                ctx.cls_res_packet, ctx.res_encoder, ctx.res_decoder
-            )
+                self.pdu_manager.register_req_serializer(
+                    ctx.cls_req_packet, ctx.req_encoder, ctx.req_decoder
+                )
+                self.pdu_manager.register_res_serializer(
+                    ctx.cls_res_packet, ctx.res_encoder, ctx.res_decoder
+                )
 
             if self.pdu_manager.is_server_event_request_in(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
