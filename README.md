@@ -37,7 +37,9 @@ If not set, the default path will be:
 
 ---
 
-## 🏁 Getting Started (WebSocket Topic)
+## 🏁 Getting Started
+
+### WebSocket Topic
 
 This repository includes a minimal publish/subscribe sample over WebSocket.
 The example sends a `geometry_msgs/Twist` PDU from a server to a client.
@@ -71,6 +73,37 @@ The example sends a `geometry_msgs/Twist` PDU from a server to a client.
    ```
    [INFO] Received Twist: linear.x=0 angular.z=0
    [INFO] Received Twist: linear.x=1 angular.z=1
+   ```
+
+### WebSocket RPC
+
+This repository also includes a simple RPC sample over WebSocket implementing an `AddTwoInts` service.
+
+1. **Start the RPC server**
+
+   ```bash
+   python examples/rpc/websocket/remote_rpc_server.py \
+     --uri ws://localhost:8080 \
+     --pdu-config examples/pdu_config.json \
+     --service-config examples/service.json
+   ```
+
+   `remote_rpc_server.py` sets up a `RemotePduServiceServerManager` with
+   `WebSocketServerCommunicationService` and registers an `AddTwoInts` handler.
+
+2. **Start the RPC client** in another terminal:
+
+   ```bash
+   python examples/rpc/websocket/remote_rpc_client.py \
+     --uri ws://localhost:8080 \
+     --pdu-config examples/pdu_config.json \
+     --service-config examples/service.json
+   ```
+
+   The client uses `RemotePduServiceClientManager` to call the same service. A successful call prints:
+
+   ```
+   レスポンス: 3
    ```
 
 ---
