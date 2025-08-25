@@ -144,6 +144,8 @@ class RemotePduServiceServerManager(
             if (robot, ch) not in s:
                 s.add((robot, ch))
                 print(f"[DEBUG] declared_for_read: client={client_id} ({robot}, {ch})")
+            if self.pdu_for_read_handler is not None:
+                self.pdu_for_read_handler(client_id, packet)
             return
         elif packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_WRITE:
             print(

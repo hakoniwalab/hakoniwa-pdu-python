@@ -19,8 +19,8 @@ DELTA_TIME_USEC = 1_000_000
 
 from hakoniwa_pdu.impl.data_packet import DataPacket 
 
-def handler_pdu_read_declaration(pkt: DataPacket) -> None:
-    print(f"[INFO] PDU read declaration received: robot_name={pkt.meta_pdu.robot_name}  channel_id={pkt.meta_pdu.channel_id}")
+def handler_pdu_read_declaration(client_id: str, pkt: DataPacket) -> None:
+    print(f"[INFO] PDU read declaration received: client_id={client_id}  robot_name={pkt.meta_pdu.robot_name}  channel_id={pkt.meta_pdu.channel_id}")
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Remote RPC server example")
