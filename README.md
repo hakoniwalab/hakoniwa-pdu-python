@@ -108,25 +108,6 @@ This repository also includes a simple RPC sample over WebSocket implementing an
 
 ---
 
-## 🚀 Example Usage
-
-### Read a PDU from drone using test script
-
-The following sample script receives the `pos` PDU from the drone and converts it into JSON.
-
-`tests/sample.py`:
-
-```python
-# (your existing sample.py content goes here)
-```
-
-### Run example
-
-```bash
-python tests/sample.py \
-  --config ./config/pdudef/webavatar.json \
-  --uri ws://localhost:8765
-```
 ## 📡 Event-driven PDU processing
 
 Server:
