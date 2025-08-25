@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Callable
 import asyncio
 import time
 
@@ -30,6 +30,7 @@ from hakoniwa_pdu.impl.data_packet import (
     REGISTER_RPC_CLIENT,
     PDU_DATA_RPC_REQUEST,
     PDU_DATA_RPC_REPLY,
+    DataPacket,
 )
 
 
@@ -54,9 +55,23 @@ class RemotePduServiceClientManager(
         self.call_start_time_msec: Optional[int] = None
         self.request_buffer: Optional[bytes] = None
         self.poll_interval_msec: Optional[int] = None
+        if hasattr(self.comm_service, "register_data_event_handler"):
+            self.comm_service.register_data_event_handler(self._on_pdu_data)
+        self._pdu_data_handler: Optional[Callable[[DataPacket], None]] = None
 
     async def start_client_service(self) -> bool:
         return await super().start_service(uri=self.uri)
+
+    def register_handler_pdu_data(self, handler: Callable[[DataPacket], None]) -> None:
+        """Client-side PDU_DATA arrival event: handler(packet)."""
+        self._pdu_data_handler = handler
+
+    async def _on_pdu_data(self, packet: DataPacket):
+        if self._pdu_data_handler is not None:
+            try:
+                self._pdu_data_handler(packet)
+            except Exception as e:
+                print(f"[WARN] client pdu_data_handler raised: {e}")
 
     async def register_client(
         self, service_name: str, client_name: str, timeout: float = 1.0
