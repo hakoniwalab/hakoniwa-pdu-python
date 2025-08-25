@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 from urllib.parse import urlparse
 
 import websockets
@@ -28,12 +28,16 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         self.server: Optional[websockets.server.Serve] = None
         # Store active client sessions; still single-client by default
         self.clients: Dict[str, ClientSession] = {}
+        self.on_disconnect: Callable[[str], None] = lambda cid: None
+        self._id_seq: int = 0
 
-    def _remove_client(self, websocket: WebSocketServerProtocol) -> None:
-        """Remove client session associated with ``websocket``."""
-        client_id = f"client_{id(websocket)}"
-        self.clients.pop(client_id, None)
-        if self.websocket is websocket:
+    def _next_client_id(self) -> str:
+        self._id_seq += 1
+        return f"ws{self._id_seq:06d}"
+
+    def _remove_client_by_id(self, client_id: str) -> None:
+        session = self.clients.pop(client_id, None)
+        if session and session.websocket is self.websocket:
             self.websocket = None
 
     async def start_service(
@@ -89,7 +93,7 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
             await websocket.close()
             return
         self.websocket = websocket
-        client_id = f"client_{id(websocket)}"
+        client_id = self._next_client_id()
         self.clients[client_id] = ClientSession(client_id, websocket)
         try:
             if self.version == "v1":
@@ -97,19 +101,54 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
             else:
                 await self._receive_loop_v2(websocket)
         finally:
-            self._remove_client(websocket)
+            self._remove_client_by_id(client_id)
+            try:
+                self.on_disconnect(client_id)
+            except Exception:
+                pass
+
+    async def send_binary_to(
+        self, client_id: str, raw_data: bytes | bytearray
+    ) -> bool:
+        session = self.clients.get(client_id)
+        if session is None:
+            return False
+        async with session.send_lock:
+            try:
+                await session.websocket.send(raw_data)
+                return True
+            except Exception as e:
+                print(f"[ERROR] Failed to send binary to {client_id}: {e}")
+                try:
+                    await session.websocket.close()
+                except Exception:
+                    pass
+                self._remove_client_by_id(client_id)
+                try:
+                    self.on_disconnect(client_id)
+                except Exception:
+                    pass
+                return False
+
+    async def send_data_to(
+        self, client_id: str, robot_name: str, channel_id: int, pdu_data: bytearray
+    ) -> bool:
+        raw = self._pack_pdu(robot_name, channel_id, pdu_data)
+        return await self.send_binary_to(client_id, raw)
 
     async def send_data(
         self, robot_name: str, channel_id: int, pdu_data: bytearray
     ) -> bool:
-        success = await super().send_data(robot_name, channel_id, pdu_data)
-        if not success and self.websocket and self.websocket.closed:
-            self._remove_client(self.websocket)
-        return success
+        if not self.clients:
+            print("[WARN] WebSocket not connected")
+            return False
+        client_id = next(iter(self.clients))
+        return await self.send_data_to(client_id, robot_name, channel_id, pdu_data)
 
     async def send_binary(self, raw_data: bytearray) -> bool:
-        success = await super().send_binary(raw_data)
-        if not success and self.websocket and self.websocket.closed:
-            self._remove_client(self.websocket)
-        return success
+        if not self.clients:
+            print("[WARN] WebSocket not connected")
+            return False
+        client_id = next(iter(self.clients))
+        return await self.send_binary_to(client_id, raw_data)
 
