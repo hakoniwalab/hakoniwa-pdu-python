@@ -5,6 +5,7 @@
 **Python PDU communication library for the Hakoniwa simulator.**
 Provides a unified transport layer where **RPC** and **Pub/Sub (topics)** run seamlessly over WebSocket.
 For high-speed use cases, a **Shared Memory (SHM)** backend is also available.
+The architecture is extensible to **Zenoh**, enabling scalable and distributed systems.
 Binary ⇔ JSON ⇔ Python type conversion is built-in, reducing boilerplate to a minimum.
 
 ---
@@ -13,7 +14,8 @@ Binary ⇔ JSON ⇔ Python type conversion is built-in, reducing boilerplate to 
 
 * **Unified layer**: RPC and Pub/Sub integrated on top of WebSocket
 * **Automatic type conversion**: safely convert between binary, JSON, and Python types with offset definitions
-* **Transport flexibility**: switch between WebSocket and SHM backends depending on performance needs
+* **Transport flexibility**: choose between **WebSocket**, **Shared Memory (SHM)**, and extensible backends such as **Zenoh**
+* **Explicit & secure connections**: WebSocket URIs (`ws://...`) clearly define communication scope
 * **Event-driven & polling support**: register handlers or poll buffers as needed
 * **Ready-to-run samples**: minimal examples for `Twist` (topic) and `AddTwoInts` (RPC) included
 
@@ -162,8 +164,9 @@ hakoniwa_pdu/
 ### Transport Implementations (`impl/`)
 
 * `ICommunicationService` defines the transport API.
-* `WebSocketCommunicationService` / `WebSocketServerCommunicationService`: WebSocket backend.
+* `WebSocketCommunicationService` / `WebSocketServerCommunicationService`: WebSocket backend (explicit URI-based connection, simple & secure).
 * `ShmCommunicationService`: high-speed shared memory backend.
+* **Pluggable design**: additional transports (e.g., **Zenoh**) can be integrated without changing application code.
 
 ### RPC Layer (`rpc/`)
 
