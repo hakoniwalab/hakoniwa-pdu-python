@@ -37,6 +37,44 @@ If not set, the default path will be:
 
 ---
 
+## 🏁 Getting Started (WebSocket Topic)
+
+This repository includes a minimal publish/subscribe sample over WebSocket.
+The example sends a `geometry_msgs/Twist` PDU from a server to a client.
+
+1. **Start the publisher (server)**
+
+   ```bash
+   python examples/topic/websocket/remote_publisher.py \
+     --uri ws://localhost:8080 \
+     --pdu-config examples/pdu_config.json \
+     --service-config examples/service.json
+   ```
+
+   `remote_publisher.py` creates a `RemotePduServiceServerManager` backed by
+   `WebSocketServerCommunicationService` and publishes incremental `Twist`
+   messages to the `pos` topic every second.
+
+2. **Start the subscriber (client)** in another terminal:
+
+   ```bash
+   python examples/topic/websocket/remote_subscriber.py \
+     --uri ws://localhost:8080 \
+     --pdu-config examples/pdu_config.json \
+     --service-config examples/service.json
+   ```
+
+   The subscriber uses `RemotePduServiceClientManager` with
+   `WebSocketCommunicationService` to receive the same `pos` topic. Received
+   PDUs are converted back to Python types and printed as:
+
+   ```
+   [INFO] Received Twist: linear.x=0 angular.z=0
+   [INFO] Received Twist: linear.x=1 angular.z=1
+   ```
+
+---
+
 ## 🚀 Example Usage
 
 ### Read a PDU from drone using test script
