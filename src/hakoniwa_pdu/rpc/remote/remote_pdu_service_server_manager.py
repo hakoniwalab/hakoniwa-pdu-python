@@ -134,7 +134,11 @@ class RemotePduServiceServerManager(
         self.pdu_for_read_handler = handler
     def register_handler_pdu_for_write(self, handler: Callable) -> None:
         self.pdu_for_write_handler = handler
-    def register_handler_request_pdu_read(self, handler: Callable) -> None:
+    def register_handler_request_pdu_read(self, handler: Callable[[str, DataPacket], None]) -> None:
+        """Register handler for REQUEST_PDU_READ packets.
+
+        The handler receives ``(client_id, packet)`` arguments.
+        """
         self.request_pdu_read_handler = handler
 
     async def handler(self, packet: DataPacket, client_id: str) -> None:
@@ -161,11 +165,15 @@ class RemotePduServiceServerManager(
             if self.pdu_for_write_handler is not None:
                 self.pdu_for_write_handler(packet)
         elif packet.meta_pdu.meta_request_type == REQUEST_PDU_READ:
-            print(
-                f"Request PDU for read: {packet.robot_name}, channel_id={packet.channel_id}"
-            )
+            robot = packet.meta_pdu.robot_name
+            ch = packet.meta_pdu.channel_id
             if self.request_pdu_read_handler is not None:
-                self.request_pdu_read_handler(packet)
+                self.request_pdu_read_handler(client_id, packet)
+            else:
+                print(
+                    f"[DEBUG] REQUEST_PDU_READ: no handler; client={client_id} ({robot},{ch})"
+                )
+            return
         elif packet.meta_pdu.meta_request_type == REGISTER_RPC_CLIENT:
             print(
                 f"Register RPC client: {packet.robot_name}, channel_id={packet.channel_id}"
@@ -191,6 +199,42 @@ class RemotePduServiceServerManager(
                     print(
                         f"[DEBUG] removed RPC client '{cname}' from service '{svc}' on disconnect"
                     )
+
+    async def send_pdu_to(
+        self,
+        client_id: str,
+        robot_name: str,
+        channel_id: int,
+        pdu_data: bytes | bytearray,
+    ) -> bool:
+        """Send PDU data only to the specified client."""
+        try:
+            return await self.comm_service.send_data_to(
+                client_id, robot_name, channel_id, bytearray(pdu_data)
+            )
+        except Exception as e:
+            print(
+                f"[ERROR] send_pdu_to: failed to send to {client_id} ({robot_name},{channel_id}): {e}"
+            )
+            return False
+
+    async def reply_latest_to(
+        self, client_id: str, robot_name: str, channel_id: int
+    ) -> bool:
+        """Send the latest buffered data for the given topic to the requester."""
+        if not self.comm_buffer:
+            print(
+                f"[DEBUG] reply_latest_to: no buffer for ({robot_name},{channel_id})"
+            )
+            return False
+        pdu_name = self.comm_buffer.get_pdu_name(robot_name, channel_id)
+        if pdu_name is None or not self.comm_buffer.contains_buffer(robot_name, pdu_name):
+            print(
+                f"[DEBUG] reply_latest_to: no buffer for ({robot_name},{channel_id})"
+            )
+            return False
+        data = self.comm_buffer.get_buffer(robot_name, pdu_name)
+        return await self.send_pdu_to(client_id, robot_name, channel_id, data)
 
     async def publish_pdu(
         self, robot_name: str, channel_id: int, pdu_data: bytes | bytearray
