@@ -39,6 +39,7 @@ class ClientHandle:
     client_id: int
     request_channel_id: int
     response_channel_id: int
+    transport_client_id: str
 
 
 class ClientRegistry:
@@ -72,7 +73,9 @@ class RemotePduServiceServerManager(
         self.topic_service_started = False
         self.rpc_service_started = False
 
-    async def _handler_register_client(self, packet: DataPacket) -> None:
+    async def _handler_register_client(
+        self, packet: DataPacket, transport_client_id: str
+    ) -> None:
         body_raw_data = packet.body_data
         body_pdu_data = pdu_to_py_RegisterClientRequestPacket(body_raw_data)
         service_name = body_pdu_data.header.service_name
@@ -90,6 +93,7 @@ class RemotePduServiceServerManager(
             client_id=client_id,
             request_channel_id=request_channel_id,
             response_channel_id=response_channel_id,
+            transport_client_id=transport_client_id,
         )
         registry.clients[body_pdu_data.header.client_name] = client_handle
 
@@ -157,13 +161,20 @@ class RemotePduServiceServerManager(
             print(
                 f"Register RPC client: {packet.robot_name}, channel_id={packet.channel_id}"
             )
-            await self._handler_register_client(packet)
+            await self._handler_register_client(packet, client_id)
         else:
             raise NotImplementedError("Unknown packet type")
 
     def on_disconnect(self, client_id: str):
         if self._declared_read.pop(client_id, None) is not None:
             print(f"[DEBUG] removed declarations for client={client_id}")
+        for svc, registry in list(self.service_registries.items()):
+            for cname, handle in list(registry.clients.items()):
+                if getattr(handle, "transport_client_id", None) == client_id:
+                    registry.clients.pop(cname, None)
+                    print(
+                        f"[DEBUG] removed RPC client '{cname}' from service '{svc}' on disconnect"
+                    )
 
     async def start_topic_service(self) -> bool:
         if self.rpc_service_started:
@@ -252,7 +263,14 @@ class RemotePduServiceServerManager(
             client_handle.response_channel_id,
             pdu_data,
         )
-        if not await self.comm_service.send_binary(raw_data):
+        send_ok = False
+        if hasattr(self.comm_service, "send_binary_to") and client_handle.transport_client_id:
+            send_ok = await self.comm_service.send_binary_to(
+                client_handle.transport_client_id, raw_data
+            )
+        else:
+            send_ok = await self.comm_service.send_binary(raw_data)
+        if not send_ok:
             self.current_client_name = None
             self.current_service_name = None
             self.request_id = None
