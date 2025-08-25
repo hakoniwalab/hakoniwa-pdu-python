@@ -1,16 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""リモートRPCクライアントの簡易サンプル."""
+"""Remote topic subscriber example."""
 import asyncio
 import argparse
-import os
 
 from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
 from hakoniwa_pdu.rpc.remote.remote_pdu_service_client_manager import (
     RemotePduServiceClientManager,
 )
+from hakoniwa_pdu.pdu_msgs.geometry_msgs.pdu_conv_Twist import pdu_to_py_Twist
 
 ASSET_NAME = "TEST_SUBSCRIBER"
+ROBOT_NAME = "drone1"
+TOPIC_NAME = "pos"
 OFFSET_PATH = "tests/config/offset"
 DELTA_TIME_USEC = 1_000_000
 
@@ -34,12 +36,19 @@ async def main() -> None:
     if not await manager.start_client_service():
         print("通信サービス開始に失敗しました")
         return
-    if not await manager.declare_pdu_for_read("drone1", "pos"):
+    if not await manager.declare_pdu_for_read(ROBOT_NAME, TOPIC_NAME):
         print("PDUの宣言に失敗しました")
         return
     print("PDUの宣言に成功しました")
 
     while True:
+        data = manager.read_pdu_raw_data(ROBOT_NAME, TOPIC_NAME)
+        if data:
+            twist = pdu_to_py_Twist(data)
+            print(
+                f"[INFO] Received Twist: "
+                f"linear.x={twist.linear.x} angular.z={twist.angular.z}"
+            )
         await asyncio.sleep(1)
 
 

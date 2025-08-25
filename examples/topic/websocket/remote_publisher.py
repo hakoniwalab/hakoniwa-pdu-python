@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""リモートRPCサーバの簡易サンプル."""
+"""Remote topic publisher example."""
 import asyncio
 import argparse
-import os
 
 from hakoniwa_pdu.impl.websocket_server_communication_service import (
     WebSocketServerCommunicationService,
@@ -11,16 +10,22 @@ from hakoniwa_pdu.impl.websocket_server_communication_service import (
 from hakoniwa_pdu.rpc.remote.remote_pdu_service_server_manager import (
     RemotePduServiceServerManager,
 )
+from hakoniwa_pdu.pdu_msgs.geometry_msgs.pdu_pytype_Twist import Twist
+from hakoniwa_pdu.pdu_msgs.geometry_msgs.pdu_conv_Twist import py_to_pdu_Twist
 
 ROBOT_NAME = "drone1"
 TOPIC_NAME = "pos"
 OFFSET_PATH = "tests/config/offset"
 DELTA_TIME_USEC = 1_000_000
 
-from hakoniwa_pdu.impl.data_packet import DataPacket 
+from hakoniwa_pdu.impl.data_packet import DataPacket
+
 
 def handler_pdu_read_declaration(client_id: str, pkt: DataPacket) -> None:
-    print(f"[INFO] PDU read declaration received: client_id={client_id}  robot_name={pkt.meta_pdu.robot_name}  channel_id={pkt.meta_pdu.channel_id}")
+    print(
+        f"[INFO] PDU read declaration received: client_id={client_id}  "
+        f"robot_name={pkt.meta_pdu.robot_name}  channel_id={pkt.meta_pdu.channel_id}"
+    )
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Remote RPC server example")
@@ -43,8 +48,17 @@ async def main() -> None:
     if not await manager.start_topic_service():
         print("トピックサービスの開始に失敗しました")
         return
-    
+
+    channel_id = manager.comm_buffer.get_pdu_channel_id(ROBOT_NAME, TOPIC_NAME)
+    count = 0
     while True:
+        twist = Twist()
+        twist.linear.x = count
+        twist.angular.z = count
+        pdu_data = py_to_pdu_Twist(twist)
+        sent = await manager.publish_pdu(ROBOT_NAME, channel_id, pdu_data)
+        print(f"[INFO] Published Twist #{count} to {sent} subscriber(s)")
+        count += 1
         await asyncio.sleep(1)
 
 
