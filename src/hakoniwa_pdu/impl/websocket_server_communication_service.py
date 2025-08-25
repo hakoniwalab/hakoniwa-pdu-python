@@ -97,6 +97,7 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         client_id = self._next_client_id()
         self.clients[client_id] = ClientSession(client_id, websocket)
         original_handler = self.handler
+        original_data_handler = getattr(self, "data_handler", None)
         if original_handler is not None:
             async def handler_with_client(packet):
                 if inspect.iscoroutinefunction(original_handler):
@@ -104,6 +105,14 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
                 else:
                     await asyncio.to_thread(original_handler, packet, client_id)
             self.handler = handler_with_client
+
+        if original_data_handler is not None:
+            async def data_handler_with_client(packet):
+                if inspect.iscoroutinefunction(original_data_handler):
+                    await original_data_handler(packet, client_id)
+                else:
+                    await asyncio.to_thread(original_data_handler, packet, client_id)
+            self.data_handler = data_handler_with_client
         try:
             if self.version == "v1":
                 await self._receive_loop_v1(websocket)
@@ -112,6 +121,8 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         finally:
             if original_handler is not None:
                 self.handler = original_handler
+            if original_data_handler is not None:
+                self.data_handler = original_data_handler
             self._remove_client_by_id(client_id)
             try:
                 self.on_disconnect(client_id)

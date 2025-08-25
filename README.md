@@ -56,6 +56,29 @@ python tests/sample.py \
   --config ./config/pdudef/webavatar.json \
   --uri ws://localhost:8765
 ```
+## 📡 Event-driven PDU processing
+
+Server:
+
+```python
+server_manager.register_handler_pdu_data(on_pdu)
+
+def on_pdu(client_id, packet):
+    ...
+```
+
+Client:
+
+```python
+client_manager.register_handler_pdu_data(on_pdu)
+
+def on_pdu(packet):
+    ...
+```
+
+Handlers run after the packet is buffered. You can still poll the buffer using
+`contains_buffer` and `get_buffer` if needed.
+
 
 ---
 

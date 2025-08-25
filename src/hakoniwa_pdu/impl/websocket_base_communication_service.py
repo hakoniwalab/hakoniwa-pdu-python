@@ -35,6 +35,8 @@ class WebSocketBaseCommunicationService(ICommunicationService):
         self.version = version
         #self.handler: Optional[Callable] = None
         self.handler: Optional[Callable[[DataPacket], Awaitable[None]]] = None
+        # Called on every PDU_DATA after it is buffered
+        self.data_handler: Optional[Callable[[DataPacket], Awaitable[None]]] = None
 
     def set_channel_config(self, config: PduChannelConfig):
         self.config = config
@@ -119,6 +121,15 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                     packet = DataPacket.decode(bytearray(message), version=self.version)
                     if packet and self.comm_buffer and packet.meta_pdu.meta_request_type in [PDU_DATA]:
                         self.comm_buffer.put_packet(packet)
+                        if self.data_handler is not None:
+                            try:
+                                if inspect.iscoroutinefunction(self.data_handler):
+                                    asyncio.create_task(self.data_handler(packet))
+                                else:
+                                    asyncio.create_task(asyncio.to_thread(self.data_handler, packet))
+                            except Exception as e:
+                                print(f"[ERROR] scheduling data_handler failed: {e}")
+                        continue
                     elif packet and packet.meta_pdu.meta_request_type in [PDU_DATA_RPC_REQUEST]:
                         print(f'[DEBUG] _receive_loop_v2: handling RPC request: meta={packet.meta_pdu.robot_name}')
                         header: ServiceRequestHeader = pdu_to_py_ServiceRequestHeader(
@@ -167,4 +178,8 @@ class WebSocketBaseCommunicationService(ICommunicationService):
 
     def register_event_handler(self, handler: Callable[[DataPacket], Awaitable[None]]):
         self.handler = handler
+
+    def register_data_event_handler(self, handler: Callable[[DataPacket], Awaitable[None]]):
+        """Called for every PDU_DATA after it is buffered."""
+        self.data_handler = handler
 

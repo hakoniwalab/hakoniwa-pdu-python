@@ -70,7 +70,10 @@ class RemotePduServiceServerManager(
         self._declared_read: dict[str, set[tuple[str, int]]] = {}
         self._read_index: dict[tuple[str, int], set[str]] = {}
         comm_service.register_event_handler(self.handler)
+        if hasattr(comm_service, "register_data_event_handler"):
+            comm_service.register_data_event_handler(self._on_pdu_data)
         comm_service.on_disconnect = self.on_disconnect
+        self._pdu_data_handler: Optional[Callable[[str, DataPacket], None]] = None
         self.topic_service_started = False
         self.rpc_service_started = False
 
@@ -181,6 +184,17 @@ class RemotePduServiceServerManager(
             await self._handler_register_client(packet, client_id)
         else:
             raise NotImplementedError("Unknown packet type")
+
+    def register_handler_pdu_data(self, handler: Callable[[str, DataPacket], None]) -> None:
+        """Called for every PDU_DATA after buffering. Handler receives (client_id, packet)."""
+        self._pdu_data_handler = handler
+
+    async def _on_pdu_data(self, packet: DataPacket, client_id: str):
+        if self._pdu_data_handler is not None:
+            try:
+                self._pdu_data_handler(client_id, packet)
+            except Exception as e:
+                print(f"[WARN] pdu_data_handler raised: {e}")
 
     def on_disconnect(self, client_id: str):
         topics = self._declared_read.pop(client_id, None)
