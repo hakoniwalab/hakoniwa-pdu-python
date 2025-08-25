@@ -68,6 +68,7 @@ class RemotePduServiceServerManager(
         self.request_id = 0
         self.req_decoders: Dict[str, Callable] = {}
         self._declared_read: dict[str, set[tuple[str, int]]] = {}
+        self._read_index: dict[tuple[str, int], set[str]] = {}
         comm_service.register_event_handler(self.handler)
         comm_service.on_disconnect = self.on_disconnect
         self.topic_service_started = False
@@ -140,10 +141,16 @@ class RemotePduServiceServerManager(
         if packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_READ:
             robot = packet.meta_pdu.robot_name
             ch = packet.meta_pdu.channel_id
+            key = (robot, ch)
+
             s = self._declared_read.setdefault(client_id, set())
-            if (robot, ch) not in s:
-                s.add((robot, ch))
-                print(f"[DEBUG] declared_for_read: client={client_id} ({robot}, {ch})")
+            if key not in s:
+                s.add(key)
+                idx = self._read_index.setdefault(key, set())
+                idx.add(client_id)
+                print(
+                    f"[DEBUG] declared_for_read: client={client_id} ({robot}, {ch})"
+                )
             if self.pdu_for_read_handler is not None:
                 self.pdu_for_read_handler(client_id, packet)
             return
@@ -168,7 +175,14 @@ class RemotePduServiceServerManager(
             raise NotImplementedError("Unknown packet type")
 
     def on_disconnect(self, client_id: str):
-        if self._declared_read.pop(client_id, None) is not None:
+        topics = self._declared_read.pop(client_id, None)
+        if topics:
+            for key in topics:
+                idx = self._read_index.get(key)
+                if idx:
+                    idx.discard(client_id)
+                    if not idx:
+                        self._read_index.pop(key, None)
             print(f"[DEBUG] removed declarations for client={client_id}")
         for svc, registry in list(self.service_registries.items()):
             for cname, handle in list(registry.clients.items()):
@@ -177,6 +191,38 @@ class RemotePduServiceServerManager(
                     print(
                         f"[DEBUG] removed RPC client '{cname}' from service '{svc}' on disconnect"
                     )
+
+    async def publish_pdu(
+        self, robot_name: str, channel_id: int, pdu_data: bytes | bytearray
+    ) -> int:
+        """Send PDU data to all clients declared for the given topic.
+
+        Returns the number of successful transmissions."""
+        key = (robot_name, channel_id)
+        cids = list(self._read_index.get(key, set()))
+        if not cids:
+            print(
+                f"[DEBUG] publish_pdu: no subscribers for ({robot_name}, {channel_id})"
+            )
+            return 0
+
+        sent = 0
+        for cid in cids:
+            try:
+                ok = await self.comm_service.send_data_to(
+                    cid, robot_name, channel_id, bytearray(pdu_data)
+                )
+                if ok:
+                    sent += 1
+                else:
+                    print(
+                        f"[WARN] publish_pdu: failed to send to {cid} ({robot_name},{channel_id})"
+                    )
+            except Exception as e:
+                print(
+                    f"[ERROR] publish_pdu: exception sending to {cid}: {e}"
+                )
+        return sent
 
     async def start_topic_service(self) -> bool:
         if self.rpc_service_started:
