@@ -43,9 +43,11 @@ async def test_declare_registry_and_cleanup():
     await asyncio.sleep(0.1)
 
     assert ("robot", 1) in server_mgr._declared_read.get(cid, set())
+    assert cid in server_mgr._read_index.get(("robot", 1), set())
 
     await client_comm.stop_service()
     await asyncio.sleep(0.1)
     assert cid not in server_mgr._declared_read
+    assert cid not in server_mgr._read_index.get(("robot", 1), set())
 
     await server_comm.stop_service()
