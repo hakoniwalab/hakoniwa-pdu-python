@@ -66,7 +66,9 @@ class RemotePduServiceServerManager(
         self.current_client_name: Optional[str] = None
         self.request_id = 0
         self.req_decoders: Dict[str, Callable] = {}
+        self._declared_read: dict[str, set[tuple[str, int]]] = {}
         comm_service.register_event_handler(self.handler)
+        comm_service.on_disconnect = self.on_disconnect
         self.topic_service_started = False
         self.rpc_service_started = False
 
@@ -130,13 +132,15 @@ class RemotePduServiceServerManager(
     def register_handler_request_pdu_read(self, handler: Callable) -> None:
         self.request_pdu_read_handler = handler
 
-    async def handler(self, packet: DataPacket) -> None:
+    async def handler(self, packet: DataPacket, client_id: str) -> None:
         if packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_READ:
-            print(
-                f"Declare PDU for read: {packet.robot_name}, channel_id={packet.channel_id}"
-            )
-            if self.pdu_for_read_handler is not None:
-                self.pdu_for_read_handler(packet)
+            robot = packet.meta_pdu.robot_name
+            ch = packet.meta_pdu.channel_id
+            s = self._declared_read.setdefault(client_id, set())
+            if (robot, ch) not in s:
+                s.add((robot, ch))
+                print(f"[DEBUG] declared_for_read: client={client_id} ({robot}, {ch})")
+            return
         elif packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_WRITE:
             print(
                 f"Declare PDU for write: {packet.robot_name}, channel_id={packet.channel_id}"
@@ -156,6 +160,10 @@ class RemotePduServiceServerManager(
             await self._handler_register_client(packet)
         else:
             raise NotImplementedError("Unknown packet type")
+
+    def on_disconnect(self, client_id: str):
+        if self._declared_read.pop(client_id, None) is not None:
+            print(f"[DEBUG] removed declarations for client={client_id}")
 
     async def start_topic_service(self) -> bool:
         if self.rpc_service_started:
