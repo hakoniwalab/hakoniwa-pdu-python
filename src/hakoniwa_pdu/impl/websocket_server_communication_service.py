@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 from urllib.parse import urlparse
@@ -95,12 +96,22 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         self.websocket = websocket
         client_id = self._next_client_id()
         self.clients[client_id] = ClientSession(client_id, websocket)
+        original_handler = self.handler
+        if original_handler is not None:
+            async def handler_with_client(packet):
+                if inspect.iscoroutinefunction(original_handler):
+                    await original_handler(packet, client_id)
+                else:
+                    await asyncio.to_thread(original_handler, packet, client_id)
+            self.handler = handler_with_client
         try:
             if self.version == "v1":
                 await self._receive_loop_v1(websocket)
             else:
                 await self._receive_loop_v2(websocket)
         finally:
+            if original_handler is not None:
+                self.handler = original_handler
             self._remove_client_by_id(client_id)
             try:
                 self.on_disconnect(client_id)

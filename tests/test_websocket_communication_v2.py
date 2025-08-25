@@ -97,7 +97,7 @@ async def test_websocket_declare_pdu_for_read_v2():
     client_buffer = CommunicationBuffer(pdu_channel_config)
 
     received_packet = None
-    async def server_event_handler(packet):
+    async def server_event_handler(packet, client_id):
         nonlocal received_packet
         received_packet = packet
 
@@ -140,7 +140,7 @@ async def test_websocket_declare_pdu_for_write_v2():
     client_buffer = CommunicationBuffer(pdu_channel_config)
 
     received_packet = None
-    async def server_event_handler(packet):
+    async def server_event_handler(packet, client_id):
         nonlocal received_packet
         received_packet = packet
 
@@ -183,7 +183,7 @@ async def test_websocket_register_rpc_client_v2():
     client_buffer = CommunicationBuffer(pdu_channel_config)
 
     received_packet = None
-    async def server_event_handler(packet):
+    async def server_event_handler(packet, client_id):
         nonlocal received_packet
         received_packet = packet
 
