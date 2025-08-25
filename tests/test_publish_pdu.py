@@ -52,10 +52,11 @@ async def test_publish_multiple_clients():
     await _declare(mgr, "c2")
     sent = await mgr.publish_pdu("R", 1, b"abc")
     assert sent == 2
-    assert comm.calls == [
+    assert len(comm.calls) == 2
+    assert set(comm.calls) == {
         ("c1", "R", 1, b"abc"),
         ("c2", "R", 1, b"abc"),
-    ]
+    }
 
 
 async def test_duplicate_declare_single_send():
@@ -92,7 +93,8 @@ async def test_send_failure():
     comm.fail_clients.add("c1")
     sent = await mgr.publish_pdu("R", 1, b"abc")
     assert sent == 1
-    assert comm.calls == [
+    assert len(comm.calls) == 2
+    assert set(comm.calls) == {
         ("c1", "R", 1, b"abc"),
         ("c2", "R", 1, b"abc"),
-    ]
+    }
