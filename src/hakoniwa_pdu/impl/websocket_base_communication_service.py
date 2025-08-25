@@ -57,13 +57,19 @@ class WebSocketBaseCommunicationService(ICommunicationService):
     def get_server_uri(self) -> str:
         return self.uri
 
+    def _pack_pdu(
+        self, robot_name: str, channel_id: int, pdu_data: bytearray
+    ) -> bytearray:
+        """Pack PDU data into wire format."""
+        packet = DataPacket(robot_name, channel_id, pdu_data)
+        return packet.encode(self.version, meta_request_type=PDU_DATA)
+
     async def send_data(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
         if not self.service_enabled or not self.websocket:
             print("[WARN] WebSocket not connected")
             return False
         try:
-            packet = DataPacket(robot_name, channel_id, pdu_data)
-            encoded = packet.encode(self.version, meta_request_type=PDU_DATA)
+            encoded = self._pack_pdu(robot_name, channel_id, pdu_data)
             await self.websocket.send(encoded)
             return True
         except Exception as e:
