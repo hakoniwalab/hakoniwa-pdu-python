@@ -1,7 +1,10 @@
+import logging
 from .pdu_channel_config import PduChannelConfig
 from .hako_binary import offset_map
 from .hako_binary import binary_writer
 from .hako_binary import binary_reader
+
+logger = logging.getLogger(__name__)
 
 class PduConvertor:
     """
@@ -92,12 +95,11 @@ class PduConvertor:
         Raises:
             ValueError: If the PDU type is not defined.
         """
-        #print(f"[DEBUG] Converting binary data for {robot_name}/{pdu_name} of size {len(binary_data)}")
+        #logger.debug(f"Converting binary data for {robot_name}/{pdu_name} of size {len(binary_data)}")
         pdu_type = self.pdu_channel_config.get_pdu_type(robot_name, pdu_name)
-        #print(f"[DEBUG] PDU type for {robot_name}/{pdu_name}: {pdu_type}")
+        #logger.debug(f"PDU type for {robot_name}/{pdu_name}: {pdu_type}")
         if pdu_type is None:
             raise ValueError(f"PDU type for {robot_name}/{pdu_name} is not defined.")
         
         json_data = binary_reader.binary_read(self.offmap, pdu_type, binary_data)
         return json_data
-    

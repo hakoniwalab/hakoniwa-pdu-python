@@ -1,7 +1,10 @@
 import threading
+import logging
 from typing import Tuple, Optional
 from .pdu_channel_config import PduChannelConfig
 from .data_packet import DataPacket
+
+logger = logging.getLogger(__name__)
 
 class CommunicationBuffer:
     def __init__(self, pdu_channel_config: PduChannelConfig):
@@ -10,7 +13,7 @@ class CommunicationBuffer:
         self.pdu_channel_config = pdu_channel_config
 
     def set_buffer(self, robot_name: str, pdu_name: str, data: bytearray):
-        #print(f"[DEBUG] set_buffer: key=({robot_name}, {pdu_name})")
+        #logger.debug(f"set_buffer: key=({robot_name}, {pdu_name})")
         with self.lock:
             self.pdu_buffer[(robot_name, pdu_name)] = data
 
@@ -23,7 +26,7 @@ class CommunicationBuffer:
             return self.pdu_buffer.get((robot_name, pdu_name), bytearray())
 
     def contains_buffer(self, robot_name: str, pdu_name: str) -> bool:
-        #print(f"[DEBUG] contains_buffer: key=({robot_name}, {pdu_name})")
+        #logger.debug(f"contains_buffer: key=({robot_name}, {pdu_name})")
         with self.lock:
             return (robot_name, pdu_name) in self.pdu_buffer
 
@@ -45,17 +48,17 @@ class CommunicationBuffer:
         channel_id = packet.get_channel_id()
         pdu_name = self.get_pdu_name(robot_name, channel_id)
         if pdu_name is None:
-            print(f"[WARN] Unknown PDU for {robot_name}:{channel_id}")
+            logger.warning(f"Unknown PDU for {robot_name}:{channel_id}")
             return
         self.set_buffer(robot_name, pdu_name, packet.get_pdu_data())
 
     def put_packet_direct(self, robot_name: str, channel_id: int, pdu_data: bytearray):
         pdu_name = self.get_pdu_name(robot_name, channel_id)
         if pdu_name is None:
-            print(f"[WARN] Unknown PDU for {robot_name}:{channel_id}")
+            logger.warning(f"Unknown PDU for {robot_name}:{channel_id}")
             return
         self.set_buffer(robot_name, pdu_name, pdu_data)
 
     def put_rpc_packet(self, service_name: str, client_name: str, pdu_data: bytearray):
-        #print(f"[DEBUG] put_rpc_packet: service={service_name}, client={client_name}")
+        #logger.debug(f"put_rpc_packet: service={service_name}, client={client_name}")
         self.set_buffer(service_name, client_name, pdu_data)

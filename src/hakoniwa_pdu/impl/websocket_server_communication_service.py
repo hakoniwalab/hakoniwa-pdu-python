@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import logging
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Optional
 from urllib.parse import urlparse
@@ -9,6 +10,8 @@ from websockets.server import WebSocketServerProtocol
 
 from .communication_buffer import CommunicationBuffer
 from .websocket_base_communication_service import WebSocketBaseCommunicationService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,10 +59,10 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         try:
             self.server = await websockets.serve(self._client_handler, parsed.hostname, parsed.port)
             self.service_enabled = True
-            print(f"[INFO] WebSocket server started at {parsed.hostname}:{parsed.port}")
+            logger.info(f"WebSocket server started at {parsed.hostname}:{parsed.port}")
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to start WebSocket server: {e}")
+            logger.error(f"Failed to start WebSocket server: {e}")
             self.service_enabled = False
             return False
 
@@ -88,7 +91,7 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         compatible across versions we accept ``path`` as an optional
         argument and ignore it.
         """
-        print("[DEBUG] _client_handler: new client connected")
+        logger.debug("_client_handler: new client connected")
         if self.websocket is not None:
             # Allow only one client
             await websocket.close()
@@ -140,7 +143,7 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
                 await session.websocket.send(raw_data)
                 return True
             except Exception as e:
-                print(f"[ERROR] Failed to send binary to {client_id}: {e}")
+                logger.error(f"Failed to send binary to {client_id}: {e}")
                 try:
                     await session.websocket.close()
                 except Exception:
@@ -162,15 +165,14 @@ class WebSocketServerCommunicationService(WebSocketBaseCommunicationService):
         self, robot_name: str, channel_id: int, pdu_data: bytearray
     ) -> bool:
         if not self.clients:
-            print("[WARN] WebSocket not connected")
+            logger.warning("WebSocket not connected")
             return False
         client_id = next(iter(self.clients))
         return await self.send_data_to(client_id, robot_name, channel_id, pdu_data)
 
     async def send_binary(self, raw_data: bytearray) -> bool:
         if not self.clients:
-            print("[WARN] WebSocket not connected")
+            logger.warning("WebSocket not connected")
             return False
         client_id = next(iter(self.clients))
         return await self.send_binary_to(client_id, raw_data)
-

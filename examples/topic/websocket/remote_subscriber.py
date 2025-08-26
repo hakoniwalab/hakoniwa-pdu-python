@@ -3,6 +3,21 @@
 """Remote topic subscriber example."""
 import asyncio
 import argparse
+import logging
+import os
+import sys
+
+# Setup logging
+if os.environ.get('HAKO_PDU_DEBUG') == '1':
+    log_level = logging.DEBUG
+else:
+    log_level = logging.INFO
+
+logging.basicConfig(
+    level=log_level,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 
 from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
 from hakoniwa_pdu.rpc.remote.remote_pdu_service_client_manager import (
@@ -19,8 +34,8 @@ DELTA_TIME_USEC = 1_000_000
 
 def print_received_twist(data_packet: DataPacket):
     twist = pdu_to_py_Twist(data_packet.get_pdu_data())
-    print(
-        f"[INFO] Received Twist: "
+    logging.info(
+        f"Received Twist: "
         f"linear.x={twist.linear.x} angular.z={twist.angular.z}"
     )
 
@@ -42,12 +57,12 @@ async def main() -> None:
     manager.initialize_services(args.service_config, DELTA_TIME_USEC)
     manager.register_handler_pdu_data(print_received_twist)
     if not await manager.start_client_service():
-        print("通信サービス開始に失敗しました")
+        logging.error("通信サービス開始に失敗しました")
         return
     if not await manager.declare_pdu_for_read(ROBOT_NAME, TOPIC_NAME):
-        print("PDUの宣言に失敗しました")
+        logging.error("PDUの宣言に失敗しました")
         return
-    print("PDUの宣言に成功しました")
+    logging.info("PDUの宣言に成功しました")
 
     while True:
         await asyncio.sleep(1)

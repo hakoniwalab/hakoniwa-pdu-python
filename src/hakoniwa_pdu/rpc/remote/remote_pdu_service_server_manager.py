@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Callable
 import asyncio
+import logging
 
 from .remote_pdu_service_base_manager import RemotePduServiceBaseManager
 from ..ipdu_service_manager import (
@@ -30,6 +31,8 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_RegisterClientResponsePacket i
     pdu_to_py_RegisterClientResponsePacket,
     py_to_pdu_RegisterClientResponsePacket,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -101,7 +104,7 @@ class RemotePduServiceServerManager(
         )
         registry.clients[body_pdu_data.header.client_name] = client_handle
 
-        print(f"[DEBUG] Registered RPC client: {body_pdu_data.header.client_name}")
+        logger.debug(f"Registered RPC client: {body_pdu_data.header.client_name}")
         register_client_res_packet = RegisterClientResponsePacket()
         register_client_res_packet.header.request_id = 0
         register_client_res_packet.header.service_name = (
@@ -129,8 +132,8 @@ class RemotePduServiceServerManager(
         )
         if not await self.comm_service.send_binary(raw_data):
             raise RuntimeError("Failed to send register client response")
-        print(
-            f"[DEBUG] Sent register client response: {body_pdu_data.header.client_name}"
+        logger.debug(
+            f"Sent register client response: {body_pdu_data.header.client_name}"
         )
 
     def register_handler_pdu_for_read(self, handler: Callable) -> None:
@@ -155,14 +158,14 @@ class RemotePduServiceServerManager(
                 s.add(key)
                 idx = self._read_index.setdefault(key, set())
                 idx.add(client_id)
-                print(
-                    f"[DEBUG] declared_for_read: client={client_id} ({robot}, {ch})"
+                logger.debug(
+                    f"declared_for_read: client={client_id} ({robot}, {ch})"
                 )
             if self.pdu_for_read_handler is not None:
                 self.pdu_for_read_handler(client_id, packet)
             return
         elif packet.meta_pdu.meta_request_type == DECLARE_PDU_FOR_WRITE:
-            print(
+            logger.info(
                 f"Declare PDU for write: {packet.robot_name}, channel_id={packet.channel_id}"
             )
             if self.pdu_for_write_handler is not None:
@@ -173,12 +176,12 @@ class RemotePduServiceServerManager(
             if self.request_pdu_read_handler is not None:
                 self.request_pdu_read_handler(client_id, packet)
             else:
-                print(
-                    f"[DEBUG] REQUEST_PDU_READ: no handler; client={client_id} ({robot},{ch})"
+                logger.debug(
+                    f"REQUEST_PDU_READ: no handler; client={client_id} ({robot},{ch})"
                 )
             return
         elif packet.meta_pdu.meta_request_type == REGISTER_RPC_CLIENT:
-            print(
+            logger.info(
                 f"Register RPC client: {packet.robot_name}, channel_id={packet.channel_id}"
             )
             await self._handler_register_client(packet, client_id)
@@ -194,7 +197,7 @@ class RemotePduServiceServerManager(
             try:
                 self._pdu_data_handler(client_id, packet)
             except Exception as e:
-                print(f"[WARN] pdu_data_handler raised: {e}")
+                logger.warning(f"pdu_data_handler raised: {e}")
 
     def on_disconnect(self, client_id: str):
         topics = self._declared_read.pop(client_id, None)
@@ -205,13 +208,13 @@ class RemotePduServiceServerManager(
                     idx.discard(client_id)
                     if not idx:
                         self._read_index.pop(key, None)
-            print(f"[DEBUG] removed declarations for client={client_id}")
+            logger.debug(f"removed declarations for client={client_id}")
         for svc, registry in list(self.service_registries.items()):
             for cname, handle in list(registry.clients.items()):
                 if getattr(handle, "transport_client_id", None) == client_id:
                     registry.clients.pop(cname, None)
-                    print(
-                        f"[DEBUG] removed RPC client '{cname}' from service '{svc}' on disconnect"
+                    logger.debug(
+                        f"removed RPC client '{cname}' from service '{svc}' on disconnect"
                     )
 
     async def send_pdu_to(
@@ -227,8 +230,8 @@ class RemotePduServiceServerManager(
                 client_id, robot_name, channel_id, bytearray(pdu_data)
             )
         except Exception as e:
-            print(
-                f"[ERROR] send_pdu_to: failed to send to {client_id} ({robot_name},{channel_id}): {e}"
+            logger.error(
+                f"send_pdu_to: failed to send to {client_id} ({robot_name},{channel_id}): {e}"
             )
             return False
 
@@ -237,14 +240,14 @@ class RemotePduServiceServerManager(
     ) -> bool:
         """Send the latest buffered data for the given topic to the requester."""
         if not self.comm_buffer:
-            print(
-                f"[DEBUG] reply_latest_to: no buffer for ({robot_name},{channel_id})"
+            logger.debug(
+                f"reply_latest_to: no buffer for ({robot_name},{channel_id})"
             )
             return False
         pdu_name = self.comm_buffer.get_pdu_name(robot_name, channel_id)
         if pdu_name is None or not self.comm_buffer.contains_buffer(robot_name, pdu_name):
-            print(
-                f"[DEBUG] reply_latest_to: no buffer for ({robot_name},{channel_id})"
+            logger.debug(
+                f"reply_latest_to: no buffer for ({robot_name},{channel_id})"
             )
             return False
         data = self.comm_buffer.get_buffer(robot_name, pdu_name)
@@ -259,8 +262,8 @@ class RemotePduServiceServerManager(
         key = (robot_name, channel_id)
         cids = list(self._read_index.get(key, set()))
         if not cids:
-            print(
-                f"[DEBUG] publish_pdu: no subscribers for ({robot_name}, {channel_id})"
+            logger.debug(
+                f"publish_pdu: no subscribers for ({robot_name}, {channel_id})"
             )
             return 0
 
@@ -273,12 +276,12 @@ class RemotePduServiceServerManager(
                 if ok:
                     sent += 1
                 else:
-                    print(
-                        f"[WARN] publish_pdu: failed to send to {cid} ({robot_name},{channel_id})"
+                    logger.warning(
+                        f"publish_pdu: failed to send to {cid} ({robot_name},{channel_id})"
                     )
             except Exception as e:
-                print(
-                    f"[ERROR] publish_pdu: exception sending to {cid}: {e}"
+                logger.error(
+                    f"publish_pdu: exception sending to {cid}: {e}"
                 )
         return sent
 
@@ -292,7 +295,7 @@ class RemotePduServiceServerManager(
         )
         pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
         self.pdu_config.update_pdudef(pdudef)
-        print("Service PDU definitions prepared.")
+        logger.info("Service PDU definitions prepared.")
         if self.topic_service_started or not await super().start_service(uri=self.uri):
             return False
         self.topic_service_started = True
@@ -309,7 +312,7 @@ class RemotePduServiceServerManager(
             )
             pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
             self.pdu_config.update_pdudef(pdudef)
-            print("Service PDU definitions prepared.")
+            logger.info("Service PDU definitions prepared.")
             if not await super().start_service(uri=self.uri):
                 return False
         self.service_registries.setdefault(service_name, ClientRegistry())
@@ -325,7 +328,7 @@ class RemotePduServiceServerManager(
         py_pdu_data.header.status = status
         py_pdu_data.header.processing_percentage = 100
         py_pdu_data.header.result_code = result_code
-        print(f"[DEBUG] Sending response: {py_pdu_data}")
+        logger.debug(f"Sending response: {py_pdu_data}")
         return self.res_encoder(py_pdu_data)
     async def poll_request(self) -> Tuple[Optional[str], Event]:
         if self.current_client_name is not None:
@@ -392,7 +395,7 @@ class RemotePduServiceServerManager(
         # TODO
         raise NotImplementedError("put_cancel_response is not implemented yet.")
         client_handle: ClientHandle = client_id
-        print("Sending cancel response")
+        logger.info("Sending cancel response")
         cancel_pdu_raw_data = self.get_response_buffer(
             None, self.API_STATUS_DONE, self.API_RESULT_CODE_CANCELED
         )
@@ -402,13 +405,13 @@ class RemotePduServiceServerManager(
             client_handle.response_channel_id,
             cancel_pdu_raw_data,
         )
-        print('before sending cancel response')
+        logger.debug('before sending cancel response')
         if not await self.comm_service.send_binary(raw_data):
             self.current_client_name = None
             self.current_service_name = None
             self.request_id = None
             return False
-        print('after sending cancel response')
+        logger.debug('after sending cancel response')
         self.current_client_name = None
         self.current_service_name = None
         self.request_id = None

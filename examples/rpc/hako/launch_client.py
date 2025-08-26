@@ -3,6 +3,20 @@
 import asyncio
 import argparse
 import os
+import logging
+import sys
+
+# Setup logging
+if os.environ.get('HAKO_PDU_DEBUG') == '1':
+    log_level = logging.DEBUG
+else:
+    log_level = logging.INFO
+
+logging.basicConfig(
+    level=log_level,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 
 from hakoniwa_pdu.impl.websocket_communication_service import WebSocketCommunicationService
 from hakoniwa_pdu.rpc.remote.remote_pdu_service_client_manager import (

@@ -3,6 +3,21 @@
 """Remote topic publisher example."""
 import asyncio
 import argparse
+import logging
+import os
+import sys
+
+# Setup logging
+if os.environ.get('HAKO_PDU_DEBUG') == '1':
+    log_level = logging.DEBUG
+else:
+    log_level = logging.INFO
+
+logging.basicConfig(
+    level=log_level,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 
 from hakoniwa_pdu.impl.websocket_server_communication_service import (
     WebSocketServerCommunicationService,
@@ -22,8 +37,8 @@ from hakoniwa_pdu.impl.data_packet import DataPacket
 
 
 def handler_pdu_read_declaration(client_id: str, pkt: DataPacket) -> None:
-    print(
-        f"[INFO] PDU read declaration received: client_id={client_id}  "
+    logging.info(
+        f"PDU read declaration received: client_id={client_id}  "
         f"robot_name={pkt.meta_pdu.robot_name}  channel_id={pkt.meta_pdu.channel_id}"
     )
 
@@ -46,7 +61,7 @@ async def main() -> None:
     manager.register_handler_pdu_for_read(handler_pdu_read_declaration)
     manager.initialize_services(args.service_config, DELTA_TIME_USEC)
     if not await manager.start_topic_service():
-        print("トピックサービスの開始に失敗しました")
+        logging.error("トピックサービスの開始に失敗しました")
         return
 
     channel_id = manager.comm_buffer.get_pdu_channel_id(ROBOT_NAME, TOPIC_NAME)
@@ -57,7 +72,7 @@ async def main() -> None:
         twist.angular.z = count
         pdu_data = py_to_pdu_Twist(twist)
         sent = await manager.publish_pdu(ROBOT_NAME, channel_id, pdu_data)
-        print(f"[INFO] Published Twist #{count} to {sent} subscriber(s)")
+        logging.info(f"Published Twist #{count} to {sent} subscriber(s)")
         count += 1
         await asyncio.sleep(1)
 

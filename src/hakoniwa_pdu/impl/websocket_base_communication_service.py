@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import logging
 from typing import Optional, Callable, Union, Awaitable
 from websockets import WebSocketClientProtocol, WebSocketServerProtocol
 
@@ -20,10 +21,12 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_conv_ServiceResponseHeader import (
     pdu_to_py_ServiceResponseHeader,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class WebSocketBaseCommunicationService(ICommunicationService):
     def __init__(self, version: str = "v1"):
-        print(f"[INFO] WebSocketBaseCommunicationService created with version: {version}")
+        logger.info(f"WebSocketBaseCommunicationService created with version: {version}")
         self.websocket: Optional[
             Union[WebSocketClientProtocol, WebSocketServerProtocol]
         ] = None
@@ -68,26 +71,26 @@ class WebSocketBaseCommunicationService(ICommunicationService):
 
     async def send_data(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bool:
         if not self.service_enabled or not self.websocket:
-            print("[WARN] WebSocket not connected")
+            logger.warning("WebSocket not connected")
             return False
         try:
             encoded = self._pack_pdu(robot_name, channel_id, pdu_data)
             await self.websocket.send(encoded)
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to send data: {e}")
+            logger.error(f"Failed to send data: {e}")
             return False
 
     async def send_binary(self, raw_data: bytearray) -> bool:
-        print(f"[DEBUG] send_binary: sending {len(raw_data)} bytes")
+        logger.debug(f"send_binary: sending {len(raw_data)} bytes")
         if not self.service_enabled or not self.websocket:
-            print("[WARN] WebSocket not connected")
+            logger.warning("WebSocket not connected")
             return False
         try:
             await self.websocket.send(raw_data)
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to send binary data: {e}")
+            logger.error(f"Failed to send binary data: {e}")
             return False
 
     async def _receive_loop_v1(
@@ -102,21 +105,21 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                     if packet and self.comm_buffer:
                         self.comm_buffer.put_packet(packet)
                 else:
-                    print(f"[WARN] Unexpected message type: {type(message)}")
+                    logger.warning(f"Unexpected message type: {type(message)}")
         except asyncio.CancelledError:
-            print("[INFO] Receive loop cancelled")
+            logger.info("Receive loop cancelled")
         except Exception as e:
-            print(f"[ERROR] Receive loop failed: {e}")
+            logger.error(f"Receive loop failed: {e}")
 
     async def _receive_loop_v2(
         self,
         websocket: Optional[Union[WebSocketClientProtocol, WebSocketServerProtocol]] = None,
     ):
         ws = websocket or self.websocket
-        print("[DEBUG] _receive_loop_v2: starting")
+        logger.debug("_receive_loop_v2: starting")
         try:
             async for message in ws:
-                print(f"[DEBUG] _receive_loop_v2: received message")
+                logger.debug(f"_receive_loop_v2: received message")
                 if isinstance(message, bytes):
                     packet = DataPacket.decode(bytearray(message), version=self.version)
                     if packet and self.comm_buffer and packet.meta_pdu.meta_request_type in [PDU_DATA]:
@@ -128,14 +131,14 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                                 else:
                                     asyncio.create_task(asyncio.to_thread(self.data_handler, packet))
                             except Exception as e:
-                                print(f"[ERROR] scheduling data_handler failed: {e}")
+                                logger.error(f"scheduling data_handler failed: {e}")
                         continue
                     elif packet and packet.meta_pdu.meta_request_type in [PDU_DATA_RPC_REQUEST]:
-                        print(f'[DEBUG] _receive_loop_v2: handling RPC request: meta={packet.meta_pdu.robot_name}')
+                        logger.debug(f'handling RPC request: meta={packet.meta_pdu.robot_name}')
                         header: ServiceRequestHeader = pdu_to_py_ServiceRequestHeader(
                             packet.get_pdu_data()
                         )
-                        print(f"[DEBUG] _receive_loop_v2: handling RPC request service_name={header.service_name}, client_name={header.client_name}")
+                        logger.debug(f"handling RPC request service_name={header.service_name}, client_name={header.client_name}")
                         self.comm_buffer.put_rpc_packet(
                             header.service_name, header.client_name, packet.get_pdu_data()
                         )
@@ -151,7 +154,7 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                         and packet.meta_pdu.meta_request_type
                         in [DECLARE_PDU_FOR_READ, DECLARE_PDU_FOR_WRITE, REQUEST_PDU_READ, REGISTER_RPC_CLIENT]
                     ):
-                        print(f"[DEBUG] _receive_loop_v2: handling packet {packet.meta_pdu.meta_request_type}")
+                        logger.debug(f"handling packet {packet.meta_pdu.meta_request_type}")
                         if self.handler is None:
                             raise RuntimeError("handler not registered")
                         # 受信ループをブロックしない：コルーチンなら create_task、同期関数なら to_thread
@@ -160,21 +163,21 @@ class WebSocketBaseCommunicationService(ICommunicationService):
                                 asyncio.create_task(self.handler(packet))
                             else:
                                 asyncio.create_task(asyncio.to_thread(self.handler, packet))
-                            print("[DEBUG] _receive_loop_v2: handler scheduled")
+                            logger.debug("handler scheduled")
                         except Exception as e:
-                            print(f"[ERROR] scheduling handler failed: {e}")
+                            logger.error(f"scheduling handler failed: {e}")
                     else:
                         raise ValueError(
                             f"Unknown message type: {packet.meta_pdu.meta_request_type if packet else 'None'}"
                         )
                 else:
-                    print(f"[WARN] Unexpected message type: {type(message)}")
-                print("[DEBUG] _receive_loop_v2: message processed")
+                    logger.warning(f"Unexpected message type: {type(message)}")
+                logger.debug("message processed")
         except asyncio.CancelledError:
-            print("[INFO] Receive loop cancelled")
+            logger.info("Receive loop cancelled")
         except Exception as e:
-            print(f"[ERROR] Receive loop failed: {e}")
-        print("[DEBUG] _receive_loop_v2: ending")
+            logger.error(f"Receive loop failed: {e}")
+        logger.debug("_receive_loop_v2: ending")
 
     def register_event_handler(self, handler: Callable[[DataPacket], Awaitable[None]]):
         self.handler = handler
@@ -182,4 +185,3 @@ class WebSocketBaseCommunicationService(ICommunicationService):
     def register_data_event_handler(self, handler: Callable[[DataPacket], Awaitable[None]]):
         """Called for every PDU_DATA after it is buffered."""
         self.data_handler = handler
-

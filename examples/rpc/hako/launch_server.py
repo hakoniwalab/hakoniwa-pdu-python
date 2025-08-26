@@ -3,6 +3,20 @@
 import asyncio
 import argparse
 import os
+import logging
+import sys
+
+# Setup logging
+if os.environ.get('HAKO_PDU_DEBUG') == '1':
+    log_level = logging.DEBUG
+else:
+    log_level = logging.INFO
+
+logging.basicConfig(
+    level=log_level,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout
+)
 
 from hakoniwa_pdu.impl.websocket_server_communication_service import (
     WebSocketServerCommunicationService,
@@ -31,7 +45,7 @@ async def system_control_handler(req: SystemControlRequest) -> SystemControlResp
     res.status_code = 0x11
     res.message = "OK"
     # ここにシステム制御のロジックを実装
-    print(f"SystemControl called: {req}")
+    logging.info(f"SystemControl called: {req}")
     return res
 
 
@@ -62,7 +76,7 @@ async def main() -> None:
     )
 
     if not await server.start_service():
-        print("サービス開始に失敗しました")
+        logging.error("サービス開始に失敗しました")
         return
 
     await server.serve(system_control_handler)

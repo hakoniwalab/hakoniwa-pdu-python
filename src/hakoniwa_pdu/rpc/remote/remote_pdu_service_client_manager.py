@@ -1,6 +1,7 @@
 from typing import Optional, Callable
 import asyncio
 import time
+import logging
 
 from .remote_pdu_service_base_manager import RemotePduServiceBaseManager
 from ..ipdu_service_manager import (
@@ -32,6 +33,8 @@ from hakoniwa_pdu.impl.data_packet import (
     PDU_DATA_RPC_REPLY,
     DataPacket,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RemotePduServiceClientManager(
@@ -71,7 +74,7 @@ class RemotePduServiceClientManager(
             try:
                 self._pdu_data_handler(packet)
             except Exception as e:
-                print(f"[WARN] client pdu_data_handler raised: {e}")
+                logger.warning(f"client pdu_data_handler raised: {e}")
 
     async def register_client(
         self, service_name: str, client_name: str, timeout: float = 1.0
@@ -88,7 +91,7 @@ class RemotePduServiceClientManager(
         )
         pdudef = self.service_config.append_pdu_def(self.pdu_config.get_pdudef())
         self.pdu_config.update_pdudef(pdudef)
-        print("Service PDU definitions prepared.")
+        logger.info("Service PDU definitions prepared.")
 
         packet = RegisterClientRequestPacket()
         packet.header.request_id = 0
@@ -115,7 +118,7 @@ class RemotePduServiceClientManager(
 
         response = pdu_to_py_RegisterClientResponsePacket(response_buffer)
         if response.header.result_code != self.API_RESULT_CODE_OK:
-            print(
+            logger.error(
                 f"Failed to register client '{client_name}' to service '{service_name}': {response.header.result_code}"
             )
             return None
@@ -135,7 +138,7 @@ class RemotePduServiceClientManager(
             client_info.request_channel_id,
             pdu_data,
         )
-        print(f'[DEBUG] call_request: sending call request: meta={len(raw_data)} bytes')
+        logger.debug(f'call_request: sending call request: meta={len(raw_data)} bytes')
         if not await self.comm_service.send_binary(raw_data):
             return False
         self.request_buffer = pdu_data
@@ -184,8 +187,8 @@ class RemotePduServiceClientManager(
         py_pdu_data = self.req_decoder(self.request_buffer)
         py_pdu_data.header.opcode = self.CLIENT_API_OPCODE_CANCEL
         py_pdu_data.header.status_poll_interval_msec = -1
-        print(f'cancel service name: {py_pdu_data.header.service_name}')
-        print(f'cancel client name: {py_pdu_data.header.client_name}')
+        logger.info(f'cancel service name: {py_pdu_data.header.service_name}')
+        logger.info(f'cancel client name: {py_pdu_data.header.client_name}')
         pdu_data = self.req_encoder(py_pdu_data)
         raw_data = self._build_binary(
             PDU_DATA_RPC_REQUEST,
@@ -193,7 +196,7 @@ class RemotePduServiceClientManager(
             client_info.request_channel_id,
             pdu_data,
         )
-        print(f'[DEBUG] call_request: sending cancel request: meta={len(raw_data)} bytes')
+        logger.debug(f'call_request: sending cancel request: meta={len(raw_data)} bytes')
         if not await self.comm_service.send_binary(raw_data):
             return False
         self.request_buffer = raw_data
