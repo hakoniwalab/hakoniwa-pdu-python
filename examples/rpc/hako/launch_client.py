@@ -5,6 +5,7 @@ import argparse
 import os
 import logging
 import sys
+from hakoniwa_pdu.rpc.codes import SystemControlOpCode
 
 # Setup logging
 if os.environ.get('HAKO_PDU_DEBUG') == '1':
@@ -69,7 +70,7 @@ async def main() -> None:
         return
 
     req = SystemControlRequest()
-    req.opcode = 0x1
+    req.opcode = SystemControlOpCode.START
     res = await client.call(req, timeout_msec=1000)
     if res is None:
         print("RPC呼び出しに失敗しました")

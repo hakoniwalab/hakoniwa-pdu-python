@@ -5,6 +5,7 @@ import argparse
 import os
 import logging
 import sys
+from hakoniwa_pdu.rpc.codes import SystemControlOpCode, SystemControlStatusCode
 
 # Setup logging
 if os.environ.get('HAKO_PDU_DEBUG') == '1':
@@ -42,7 +43,20 @@ DELTA_TIME_USEC = 1_000_000
 async def system_control_handler(req: SystemControlRequest) -> SystemControlResponse:
     """システム制御サービスの実装."""
     res = SystemControlResponse()
-    res.status_code = 0x11
+    match req.opcode:
+        case SystemControlOpCode.START:
+            logging.info("SystemControlOpCode: START")
+        case SystemControlOpCode.STOP:
+            logging.info("SystemControlOpCode: STOP")
+        case SystemControlOpCode.RESET:
+            logging.info("SystemControlOpCode: RESET")
+        case SystemControlOpCode.TERMINATE:
+            logging.info("SystemControlOpCode: TERMINATE")
+        case SystemControlOpCode.STATUS:
+            logging.info("SystemControlOpCode: STATUS")
+        case _:
+            logging.warning(f"Unknown opcode: {req.opcode}")
+    res.status_code = SystemControlStatusCode.OK
     res.message = "OK"
     # ここにシステム制御のロジックを実装
     logging.info(f"SystemControl called: {req}")
