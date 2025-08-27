@@ -167,9 +167,10 @@ class RemotePduServiceClientManager(
             self.request_id += 1
             self.request_buffer = None
             return self.CLIENT_API_EVENT_RESPONSE_IN
-        current_time_msec = int(time.time() * 1000)
-        if (current_time_msec - self.call_start_time_msec) > self.timeout_msec:
-            return self.CLIENT_API_EVENT_REQUEST_TIMEOUT
+        if self.timeout_msec > 0:
+            current_time_msec = int(time.time() * 1000)
+            if (current_time_msec - self.call_start_time_msec) > self.timeout_msec:
+                return self.CLIENT_API_EVENT_REQUEST_TIMEOUT
         return self.CLIENT_API_EVENT_NONE
 
     def get_response(self, service_name: str, client_id: ClientId) -> PduData:

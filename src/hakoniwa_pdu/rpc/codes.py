@@ -4,6 +4,7 @@ class SystemControlOpCode(IntEnum):
     """
     Opcodes for the SystemControl service request.
     """
+    ACTIVATE = 0
     START = 1
     STOP = 2
     RESET = 3
