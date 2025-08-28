@@ -96,9 +96,12 @@ class ProtocolServerBase:
             self.pdu_manager.API_STATUS_DONE,
             self.pdu_manager.API_RESULT_CODE_OK,
         )
+        print(f"[DEBUG] _handle_request: got response buffer of {len(byte_array)} bytes")
         r = ctx.res_decoder(byte_array)
         r.body = response_data
+        print(f"[DEBUG] _handle_request: got response PDU")
         res_pdu_data = ctx.res_encoder(r)
+        print(f"[DEBUG] _handle_request: encoded response PDU of {len(res_pdu_data)} bytes")
         return res_pdu_data
 
 
