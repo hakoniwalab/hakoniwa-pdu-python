@@ -151,12 +151,13 @@ def make_protocol_clients(
     for spec in services:
         service_name = spec["service_name"]
         manager = spec.get("pdu_manager", pdu_manager)
+        service_pkg = spec.get("pkg", pkg)
         clients[service_name] = make_protocol_client(
             pdu_manager=manager,
             service_name=service_name,
             client_name=spec["client_name"],
             srv=spec["srv"],
-            pkg=pkg,
+            pkg=service_pkg,
             ProtocolClientClass=ProtocolClientClass,
         )
     return clients
@@ -193,18 +194,20 @@ def make_protocol_servers(
         raise ValueError("No services specified")
 
     first = services[0]
+    first_pkg = first.get("pkg", pkg)
     server = make_protocol_server(
         pdu_manager=pdu_manager,
         service_name=first["service_name"],
         srv=first["srv"],
         max_clients=first["max_clients"],
-        pkg=pkg,
+        pkg=first_pkg,
         ProtocolServerClass=ProtocolServerClass,
     )
 
     for spec in services[1:]:
+        service_pkg = spec.get("pkg", pkg)
         ReqPacket, ResPacket, req_encoder, req_decoder, res_encoder, res_decoder = _load_protocol_components(
-            spec["srv"], pkg
+            spec["srv"], service_pkg
         )
         server.add_service(
             spec["service_name"],
