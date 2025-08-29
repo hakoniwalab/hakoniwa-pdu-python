@@ -3,7 +3,7 @@ import logging
 import json
 
 from .hako_base_rpc_server import HakoBaseRpcServer
-from hako_drone.hako_drone_service import HakoDroneService
+from hakoniwa_pdu.apps.drone.hako_drone_service import HakoDroneService
 from hakoniwa_pdu.rpc.codes import SystemControlStatusCode
 try:
     from hakoniwa_pdu.pdu_msgs.drone_srv_msgs.pdu_pytype_DroneSetReadyRequest import DroneSetReadyRequest

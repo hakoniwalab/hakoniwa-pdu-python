@@ -21,7 +21,7 @@ from hakoniwa_pdu.pdu_msgs.hako_srv_msgs.pdu_pytype_SystemControlResponse import
 )
 from hakoniwa_pdu.rpc.service_config import patch_service_base_size
 
-from hako_launch.hako_launcher import LauncherService
+from hakoniwa_pdu.apps.launcher.hako_launcher import LauncherService
 
 # 定数
 ASSET_NAME = "HakoRpcBaseServer"

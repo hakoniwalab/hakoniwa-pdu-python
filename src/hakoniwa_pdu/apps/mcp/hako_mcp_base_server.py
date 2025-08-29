@@ -13,11 +13,10 @@ from hakoniwa_pdu.rpc.codes import SystemControlOpCode
 ASSET_NAME = "HakoMcpServer"
 CLIENT_NAME_DEFAULT = "HakoMcpServerClient"
 SYSTEM_CONTROL_SERVICE_NAME = "Service/SystemControl"
-OFFSET_PATH = "/usr/local/share/hakoniwa/offset"
 DELTA_TIME_USEC = 1_000_000
 
 class HakoMcpBaseServer:
-    def __init__(self, server_name, pdu_config_path: str, service_config_path: str, simulator_name="Simulator"):
+    def __init__(self, server_name, pdu_config_path: str, service_config_path: str, offset_path: str, simulator_name="Simulator"):
         self.server = Server(server_name)
         self.simulator_name = simulator_name
         self.rpc_clients = {}
@@ -25,6 +24,7 @@ class HakoMcpBaseServer:
         self.rpc_uri = "ws://localhost:8080"
         self.pdu_config_path = pdu_config_path
         self.service_config_path = service_config_path
+        self.offset_path = offset_path
 
     def add_rpc_service(self, service_name: str, srv_pkg: str, srv_type: str, client_name: str = CLIENT_NAME_DEFAULT):
         self.rpc_service_specs.append({
@@ -44,7 +44,7 @@ class HakoMcpBaseServer:
             manager = RemotePduServiceClientManager(
                 asset_name=ASSET_NAME,
                 pdu_config_path=self.pdu_config_path,
-                offset_path=OFFSET_PATH,
+                offset_path=self.offset_path,
                 comm_service=comm,
                 uri=self.rpc_uri,
             )

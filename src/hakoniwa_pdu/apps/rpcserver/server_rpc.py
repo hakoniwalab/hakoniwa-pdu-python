@@ -4,8 +4,8 @@ import argparse
 import sys
 import os
 
-from launcher.hako_rpc.hako_base_rpc_server import HakoBaseRpcServer
-from hako_rpc.hako_drone_rpc_server import HakoDroneRpcServer
+from hakoniwa_pdu.apps.rpcserver.hako_base_rpc_server  import HakoBaseRpcServer
+from hakoniwa_pdu.apps.rpcserver.hako_drone_rpc_server import HakoDroneRpcServer
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description="Hakoniwa RPC Server")

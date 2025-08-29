@@ -21,10 +21,12 @@ import os
 
 pdu_config_path = os.getenv("PDU_CONFIG_PATH", "launcher/config/drone_pdu_config.json")
 service_config_path = os.getenv("SERVICE_CONFIG_PATH", "launcher/config/drone_service.json")
+offset_path = os.getenv("HAKO_BINARY_PATH", "/usr/share/hakoniwa/offset/")
 
 server_instance = HakoMcpDroneServer(
     pdu_config_path=pdu_config_path,
     service_config_path=service_config_path,
+    offset_path=offset_path,
     server_name="hakoniwa_drone"
 )
 # 2. Get the mcp.Server object from the instance

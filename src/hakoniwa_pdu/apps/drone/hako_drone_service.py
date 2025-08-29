@@ -10,8 +10,8 @@ from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_pytype_HakoBatteryStatus import HakoBat
 libs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', 'drone_sample', 'libs'))
 sys.path.insert(0, libs_path)
 
-import hakosim
-from hako_launch.hako_launcher import LauncherService
+import hakoniwa_pdu.apps.drone.hakosim
+from hakoniwa_pdu.apps.launcher.hako_launcher import LauncherService
 
 @dataclass
 class DroneState:

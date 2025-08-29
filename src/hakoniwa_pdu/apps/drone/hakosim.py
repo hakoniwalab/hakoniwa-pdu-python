@@ -35,8 +35,8 @@ from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_conv_HakoCmdMagnetHolder import py_to_p
 from hakoniwa_pdu.pdu_msgs.sensor_msgs.pdu_pytype_PointCloud2 import PointCloud2
 from hakoniwa_pdu.pdu_msgs.sensor_msgs.pdu_conv_PointCloud2 import pdu_to_py_PointCloud2, py_to_pdu_PointCloud2
 
-import libs.hakosim_types as hakosim_types
-import libs.hakosim_lidar as hakosim_lidar
+import hakoniwa_pdu.apps.drone.hakosim_types as hakosim_types
+import hakoniwa_pdu.apps.drone.hakosim_lidar as hakosim_lidar
 import math
 import json
 import os

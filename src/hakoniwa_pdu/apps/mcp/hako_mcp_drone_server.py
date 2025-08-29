@@ -4,7 +4,7 @@ import mcp.types as types
 import json
 import logging
 import os
-from examples.drone_sample.libs.hakosim_lidar import LidarData, LiDARFilter
+from hakoniwa_pdu.apps.drone.hakosim_lidar import LidarData, LiDARFilter
 
 try:
     from hakoniwa_pdu.pdu_msgs.drone_srv_msgs.pdu_pytype_DroneSetReadyRequest import DroneSetReadyRequest
@@ -83,8 +83,8 @@ drone_get_state_output_schema = {
 }
 
 class HakoMcpDroneServer(HakoMcpBaseServer):
-    def __init__(self, pdu_config_path: str, service_config_path: str, server_name="hakoniwa_drone"):
-        super().__init__(server_name, pdu_config_path, service_config_path, simulator_name="Drone")
+    def __init__(self, pdu_config_path: str, service_config_path: str, offset_path: str, server_name="hakoniwa_drone"):
+        super().__init__(server_name, pdu_config_path, service_config_path, offset_path, simulator_name="Drone")
         self._register_drone_rpc_services()
 
     def _register_drone_rpc_services(self):
