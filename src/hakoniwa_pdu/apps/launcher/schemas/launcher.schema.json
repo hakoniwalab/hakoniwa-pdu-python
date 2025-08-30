@@ -96,6 +96,12 @@
           "default": 0,
           "description": "このアセットを起動した後に挟む待ち時間（秒。0で待機なし）"
         },
+        "activation_timing": {
+          "type": "string",
+          "enum": ["before_start", "after_start"],
+          "default": "before_start",
+          "description": "アセットを起動するタイミング。before_start (hako-cmd start前) or after_start (hako-cmd start後)"
+        },
         "depends_on": { "type": "array", "items": { "type": "string" }, "default": [] },
         "start_grace_sec": { "type": "number", "minimum": 0 }
       },

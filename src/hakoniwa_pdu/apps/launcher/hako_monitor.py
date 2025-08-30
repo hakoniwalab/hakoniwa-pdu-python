@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 import subprocess
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 
 from .effective_model import EffectiveSpec, EffectiveAsset
 from .envmerge import merge_env
@@ -38,21 +38,22 @@ class HakoMonitor:
     def __init__(self, spec: EffectiveSpec, *, defaults_env_ops: Optional[dict] = None) -> None:
         self.spec = spec
         # loader の設計上、EffectiveAsset.env には「asset個別 or defaults のどちらか」が入っている。
-        # defaults と個別を分けて合成したい場合は defaults_env_ops を渡す。
+        # defaults と個別を合成したい場合は defaults_env_ops を渡す。
         self.defaults_env_ops = defaults_env_ops
         self.procs: List[Running] = []
         self._aborted = False
 
     # ---------- public API ----------
-    def start_all(self) -> None:
+    def start_assets(self, timing: Literal["before_start", "after_start"]) -> None:
         """
-        配列順に起動。各アセットごとに:
+        指定されたタイミングのアセットを起動。各アセットごとに:
           1) env を合成
           2) spawn
           3) start_grace_sec 生存したら安定とみなし、delay_sec だけ待って次へ
         途中で死んだら即 abort。
         """
-        for a in self.spec.assets:
+        assets_to_start = [a for a in self.spec.assets if a.activation_timing == timing]
+        for a in assets_to_start:
             if self._aborted:
                 break
 

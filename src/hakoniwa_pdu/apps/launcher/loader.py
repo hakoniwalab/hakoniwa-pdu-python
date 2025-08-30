@@ -57,6 +57,7 @@ def _effective_asset(asset: Asset, defaults: Defaults, base_dir: Path) -> Effect
         stdout=stdout_abs,
         stderr=stderr_abs,
         delay_sec=float(delay),
+        activation_timing=asset.activation_timing,
         depends_on=list(asset.depends_on or []),
         start_grace_sec=float(start_grace),
         env=(asset.env.dict(exclude_none=True) if asset.env else

@@ -6,10 +6,6 @@ from dataclasses import dataclass, field
 from hakoniwa_pdu.pdu_msgs.geometry_msgs.pdu_pytype_Pose import Pose
 from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_pytype_HakoBatteryStatus import HakoBatteryStatus
 
-# hakosimをインポートするためにパスを追加
-libs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'examples', 'drone_sample', 'libs'))
-sys.path.insert(0, libs_path)
-
 import hakoniwa_pdu.apps.drone.hakosim
 from hakoniwa_pdu.apps.launcher.hako_launcher import LauncherService
 

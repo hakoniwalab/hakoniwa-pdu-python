@@ -38,8 +38,8 @@ class LauncherService:
         if self.state == "TERMINATED":
             self.monitor = HakoMonitor(self.spec, defaults_env_ops=self.defaults_env_ops)
 
-        print("[INFO] activating all assets...")
-        self.monitor.start_all()
+        print("[INFO] activating 'before_start' assets...")
+        self.monitor.start_assets("before_start")
         self._stop_watch.clear()
         self._watch_thread = threading.Thread(target=self._watch_loop, daemon=True)
         self._watch_thread.start()
@@ -57,6 +57,9 @@ class LauncherService:
         match command:
             case "start":
                 rc = self.cli.start()
+                if rc == 0:
+                    print("[INFO] activating 'after_start' assets...")
+                    self.monitor.start_assets("after_start")
                 self.state = "RUNNING"
                 print(f"[INFO] hako-cmd start exited with {rc}")
             case "stop":

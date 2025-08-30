@@ -18,4 +18,6 @@ class SystemControlStatusCode(IntEnum):
     """
     OK = 0
     ERROR = 1
+    FATAL = 2
+    INTERNAL = 3
     # Add other status codes as needed.

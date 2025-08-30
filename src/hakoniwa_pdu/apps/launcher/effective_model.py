@@ -20,6 +20,7 @@ class EffectiveAsset(BaseModel):
     stdout: Optional[Path] = None
     stderr: Optional[Path] = None
     delay_sec: float
+    activation_timing: str
     depends_on: List[str] = Field(default_factory=list)
     start_grace_sec: float  # defaults を必ず反映して non-optional にする
 

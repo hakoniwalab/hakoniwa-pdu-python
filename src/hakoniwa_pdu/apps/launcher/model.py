@@ -63,6 +63,9 @@ class Asset(BaseModel):
     # このアセット起動後に挟む待ち時間（秒。0で待機なし）
     delay_sec: Optional[NonNegativeFloat] = None
 
+    # アセットを起動するタイミング
+    activation_timing: Literal["before_start", "after_start"] = "before_start"
+
     # 依存（必要なら使用）。未使用なら空配列のままでOK。
     depends_on: List[str] = Field(default_factory=list)
 

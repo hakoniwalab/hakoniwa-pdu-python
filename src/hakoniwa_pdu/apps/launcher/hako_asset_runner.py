@@ -5,11 +5,64 @@ import os, sys, time, signal, subprocess, json
 from dataclasses import dataclass
 from typing import Mapping, Optional, Iterable, Union
 from os import PathLike
+import re
 
 IS_POSIX = (os.name == "posix")
 IS_WIN   = (os.name == "nt")
 
 PathStr = Union[str, PathLike[str]]
+
+def _ps_quote(s: str) -> str:
+    return "'" + s.replace("'", "''") + "'"
+
+def _is_wsl() -> bool:
+    try:
+        with open("/proc/version", "r", errors="ignore") as f:
+            ver = f.read()
+    except Exception:
+        ver = ""
+    return bool(os.getenv("WSL_INTEROP")) or os.path.exists("/proc/sys/fs/binfmt_misc/WSLInterop") \
+           or ("Microsoft" in ver)
+
+
+def _looks_windows_exe(cmd: str) -> bool:
+    c = cmd.lower()
+    return c.endswith(".exe") or c in ("cmd.exe", "powershell.exe")
+
+def _to_windows_path(p: Optional[PathStr], *, cwd: Optional[PathStr]) -> Optional[str]:
+    if p is None:
+        return None
+    # 絶対化（cwd は WSL側のパス想定）
+    p = os.path.abspath(os.fspath(p) if cwd is None else os.path.join(os.fspath(cwd), os.fspath(p)))
+    try:
+        # wslpath -w で Windows パスへ
+        out = subprocess.check_output(["wslpath", "-w", p], text=True).strip()
+        return out
+    except Exception:
+        # /mnt/c/... ならそのままでも通る場合アリ。最悪は無変換で返す。
+        return p
+
+TASKLIST = r"/mnt/c/Windows/System32/tasklist.exe"
+def _win_pid_exists(pid: int) -> bool:
+    try:
+        cp = subprocess.run(
+            [TASKLIST, "/FO", "CSV", "/NH", "/FI", f"PID eq {pid}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            timeout=2.0,          # ★ ここでハング防止
+            check=False,
+        )
+        out = (cp.stdout or "").strip()
+        # CSV形式: "Image Name","PID","Session Name","Session#","Mem Usage"
+        return out and out[0] == '"' and f'",\"{pid}\",' in out
+    except subprocess.TimeoutExpired:
+        # ★ タイムアウト時は「生きている」とみなしておく（起動安定化フェーズでの誤検知防止）
+        #   ログ出したいなら print でもOK
+        # print(f"[WARN] tasklist timeout for PID {pid}")
+        return True
+    except Exception:
+        return False
 
 @dataclass
 class ExitInfo:
@@ -36,6 +89,7 @@ class AssetRunner:
         # envmerge 済みの環境を受け取り、親環境とマージ済み前提（そのまま渡す）
         self.env = dict(os.environ) | dict(env or {})
         self.handle: Optional[ProcHandle] = None
+        self._win_pid: Optional[int] = None
 
     # ---------- helpers ----------
     @staticmethod
@@ -70,6 +124,51 @@ class AssetRunner:
         if self.handle and self.is_alive():
             raise RuntimeError("process already running")
 
+        # --- Windows(.exe) を WSL から起動する分岐（本体は Windows プロセス） ---
+        if _is_wsl() and _looks_windows_exe(command):
+            import shlex
+            win_out = _to_windows_path(stdout, cwd=cwd)
+            win_err = _to_windows_path(stderr, cwd=cwd)
+            win_cwd = _to_windows_path(cwd, cwd=None) if cwd else None
+
+            # 親ディレクトリ作成（Windows側で）
+            pre = []
+            if win_out:
+                pre.append(f"[System.IO.Directory]::CreateDirectory((Split-Path {_ps_quote(win_out)})) | Out-Null;")
+            if win_err:
+                pre.append(f"[System.IO.Directory]::CreateDirectory((Split-Path {_ps_quote(win_err)})) | Out-Null;")
+            pre_cmd = "".join(pre)
+
+            # PS用クォートで配列を組む（引数なしなら -ArgumentList 自体を付けない）
+            exe = _ps_quote(os.fspath(command))
+            arg_elems = ",".join(_ps_quote(str(a)) for a in list(args))
+            arglist = (f"-ArgumentList {arg_elems} " if arg_elems else "")
+
+            redir_out = f"-RedirectStandardOutput {_ps_quote(win_out)} " if win_out else ""
+            redir_err = f"-RedirectStandardError {_ps_quote(win_err)} " if win_err else ""
+
+            wd = f"-WorkingDirectory {_ps_quote(win_cwd)} " if win_cwd else ""
+            ps_script = (
+                f"{pre_cmd}"
+                f"$p=Start-Process {exe} {arglist}-PassThru {redir_out}{redir_err}{wd};"
+                f"Write-Output $p.Id"
+            )
+
+            pwsh = ["powershell.exe", "-NoProfile", "-Command", ps_script]
+            out = subprocess.check_output(pwsh, cwd=(os.fspath(cwd) if cwd else None),
+                                        env=self.env, text=True)
+            self._win_pid = int(out.strip())
+            dummy = subprocess.Popen(["/bin/true"]) if IS_POSIX else subprocess.Popen(["cmd.exe", "/c", "exit", "0"])
+            self.handle = ProcHandle(
+                popen=dummy,
+                started_at=time.time(),
+                stdout_path=(os.fspath(stdout) if stdout else None),
+                stderr_path=(os.fspath(stderr) if stderr else None),
+                _stdout_f=None, _stderr_f=None
+            )
+            return self.handle
+
+        # --- Mac/Linux/WSL ネイティブプロセス ---
         out_f, out_path = self._open_sink(stdout)
         err_f, err_path = self._open_sink(stderr)
 
@@ -97,10 +196,19 @@ class AssetRunner:
         return self.handle
 
     def is_alive(self) -> bool:
-        return bool(self.handle) and self.handle.popen.poll() is None  # type: ignore[union-attr]
+        if self._win_pid is not None:
+            return _win_pid_exists(self._win_pid)
+        return bool(self.handle) and self.handle.popen.poll() is None
 
     def wait(self, *, timeout: Optional[float] = None) -> Optional[int]:
-        """終了を待つ（timeout秒以内）。戻り値はreturncode。"""
+        if self._win_pid is not None:
+            end = None if timeout is None else (time.time() + float(timeout))
+            while True:
+                if not self.is_alive():
+                    return 0
+                if end is not None and time.time() >= end:
+                    return None
+                time.sleep(0.1)
         if not self.handle:
             return 0
         try:
@@ -108,9 +216,24 @@ class AssetRunner:
         except subprocess.TimeoutExpired:
             return None
 
+
     def terminate(self, *, grace_sec: float = 5.0) -> None:
         """優雅停止（TERM/CTRL_BREAK）→ 猶予 → 未終了なら kill()。"""
         h = self.handle
+        # Windows プロセス（.exe）を WSL から管理する場合
+        if self._win_pid is not None:
+            # 穏やかに停止（/F なしに相当）
+            subprocess.run(["powershell.exe", "-NoProfile", "-Command",
+                            f"Stop-Process -Id {self._win_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self._wait_for_exit(timeout=grace_sec)
+            if self.is_alive():
+                self.kill()
+            else:
+                self._win_pid = None
+                self._cleanup_files()
+            return
+
+
         if not h or not self.is_alive():
             self._cleanup_files()
             return
@@ -133,6 +256,15 @@ class AssetRunner:
             self._cleanup_files()
 
     def kill(self) -> None:
+        # Windows 側 PID を掴んでいる場合は強制終了
+        if self._win_pid is not None:
+            subprocess.run(["taskkill.exe", "/PID", str(self._win_pid), "/T", "/F"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self._wait_for_exit(timeout=2.0)
+            self._win_pid = None
+            self._cleanup_files()
+            return
+                
         h = self.handle
         if not h or not self.is_alive():
             self._cleanup_files()
@@ -148,6 +280,18 @@ class AssetRunner:
 
     def exit_info(self) -> ExitInfo:
         h = self.handle
+        # Windows プロセス優先で情報を埋める
+        if self._win_pid is not None:
+            alive = self.is_alive()
+            return ExitInfo(
+                exited=(not alive),
+                exit_code=None,  # 取得は面倒なので None（必要なら Get-Process の HasExited 等の追加実装へ）
+                signal=None,
+                started_at=(h.started_at if h else 0.0),
+                exited_at=(time.time() if not alive else None),
+                pid=self._win_pid
+            )
+                
         if not h:
             return ExitInfo(exited=True, exit_code=None, signal=None, started_at=0.0, exited_at=time.time(), pid=None)
 
@@ -171,6 +315,7 @@ class AssetRunner:
         end = time.time() + timeout
         while time.time() < end:
             if not self.is_alive():
+                self._win_pid = None
                 return
             time.sleep(0.05)
 
