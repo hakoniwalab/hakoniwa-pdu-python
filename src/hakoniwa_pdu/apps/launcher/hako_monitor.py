@@ -121,11 +121,13 @@ class HakoMonitor:
         """
         猶予時間中にプロセスが落ちないことを確認。True=安定、False=失敗。
         """
+        print(f"[INFO] waiting for asset to stabilize for {grace} seconds...")
         end = time.time() + float(grace)
         while time.time() < end:
             if not runner.is_alive():
                 return False
             time.sleep(0.1)
+        print(f"[INFO] asset stabilized")
         return True
 
     def _notify(self, event: str, asset: str) -> None:

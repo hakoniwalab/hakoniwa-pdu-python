@@ -50,16 +50,19 @@ def _win_pid_exists(pid: int) -> bool:
             text=True,
             stderr=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
-            timeout=2.0,          # ★ ここでハング防止
+            timeout=2.0,
             check=False,
         )
         out = (cp.stdout or "").strip()
-        # CSV形式: "Image Name","PID","Session Name","Session#","Mem Usage"
-        return out and out[0] == '"' and f'",\"{pid}\",' in out
+        # 例: "notepad.exe","12345","Console","1","12,345 K"
+        if not out or out[0] != '"':
+            return False
+        try:
+            return f',"{pid}",' in out
+        except Exception:
+            return False
     except subprocess.TimeoutExpired:
-        # ★ タイムアウト時は「生きている」とみなしておく（起動安定化フェーズでの誤検知防止）
-        #   ログ出したいなら print でもOK
-        # print(f"[WARN] tasklist timeout for PID {pid}")
+        # タイムアウト時は存続とみなす（誤検知防止）
         return True
     except Exception:
         return False
@@ -126,7 +129,6 @@ class AssetRunner:
 
         # --- Windows(.exe) を WSL から起動する分岐（本体は Windows プロセス） ---
         if _is_wsl() and _looks_windows_exe(command):
-            import shlex
             win_out = _to_windows_path(stdout, cwd=cwd)
             win_err = _to_windows_path(stderr, cwd=cwd)
             win_cwd = _to_windows_path(cwd, cwd=None) if cwd else None
@@ -139,24 +141,42 @@ class AssetRunner:
                 pre.append(f"[System.IO.Directory]::CreateDirectory((Split-Path {_ps_quote(win_err)})) | Out-Null;")
             pre_cmd = "".join(pre)
 
-            # PS用クォートで配列を組む（引数なしなら -ArgumentList 自体を付けない）
-            exe = _ps_quote(os.fspath(command))
+            # 引数組み立て
+            exe_name = os.fspath(command)              # 例: "simulation.exe"
+            exe_quoted = _ps_quote(exe_name)
             arg_elems = ",".join(_ps_quote(str(a)) for a in list(args))
             arglist = (f"-ArgumentList {arg_elems} " if arg_elems else "")
 
-            redir_out = f"-RedirectStandardOutput {_ps_quote(win_out)} " if win_out else ""
-            redir_err = f"-RedirectStandardError {_ps_quote(win_err)} " if win_err else ""
+            redir_out = f" -RedirectStandardOutput {_ps_quote(win_out)} " if win_out else ""
+            redir_err = f" -RedirectStandardError {_ps_quote(win_err)} " if win_err else ""
+            wd = f" -WorkingDirectory {_ps_quote(win_cwd)} " if win_cwd else ""
 
-            wd = f"-WorkingDirectory {_ps_quote(win_cwd)} " if win_cwd else ""
             ps_script = (
-                f"{pre_cmd}"
-                f"$p=Start-Process {exe} {arglist}-PassThru {redir_out}{redir_err}{wd};"
-                f"Write-Output $p.Id"
+                "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+                "$ErrorActionPreference='Stop'; "
+                f"{'Set-Location ' + _ps_quote(_to_windows_path(cwd, cwd=None)) + '; ' if cwd else ''}"
+                # ★ FilePath/WorkingDirectory/リダイレクト/WindowStyle は使わない
+                f"$p = Start-Process {exe_quoted}{arglist} -PassThru; "
+                "$p | Select-Object -ExpandProperty Id"
             )
+            #print(f"[INFO] ps_script={ps_script}")
+            #print(f"[INFO] win_cwd={win_cwd}, command={exe_name}, args={list(args)}")
 
-            pwsh = ["powershell.exe", "-NoProfile", "-Command", ps_script]
-            out = subprocess.check_output(pwsh, cwd=(os.fspath(cwd) if cwd else None),
-                                        env=self.env, text=True)
+            pwsh = [
+                "powershell.exe", "-NoProfile", "-NonInteractive",
+                "-ExecutionPolicy", "Bypass", "-Command", ps_script
+            ]
+            out = subprocess.check_output(
+                pwsh,
+                # PowerShell 自体の cwd は WSL パスでもOKだが、無指定が一番トラブル少ない
+                cwd=None,
+                # ★ 重要：WSL 環境変数を渡さない（Windows PATH を壊さない）
+                env=None,
+                text=True,
+                encoding="utf-8",
+                stderr=subprocess.PIPE,
+                timeout=15.0
+            )
             self._win_pid = int(out.strip())
             dummy = subprocess.Popen(["/bin/true"]) if IS_POSIX else subprocess.Popen(["cmd.exe", "/c", "exit", "0"])
             self.handle = ProcHandle(
@@ -178,9 +198,9 @@ class AssetRunner:
             stdout=(out_f or None),
             stderr=(err_f or None),
             creationflags=self._creationflags(),
-            close_fds=True,  # FD漏れ防止（Windowsでstdout/errを指定してもTrueでOK）
+            close_fds=True,
         )
-        if IS_POSIX:  # 後でグループシグナル送るため新PG
+        if IS_POSIX:
             popen_kw["preexec_fn"] = os.setsid
 
         popen = subprocess.Popen([command, *list(args)], **popen_kw)
@@ -194,6 +214,8 @@ class AssetRunner:
             _stderr_f=err_f,
         )
         return self.handle
+    
+    
 
     def is_alive(self) -> bool:
         if self._win_pid is not None:
@@ -222,9 +244,19 @@ class AssetRunner:
         h = self.handle
         # Windows プロセス（.exe）を WSL から管理する場合
         if self._win_pid is not None:
-            # 穏やかに停止（/F なしに相当）
-            subprocess.run(["powershell.exe", "-NoProfile", "-Command",
-                            f"Stop-Process -Id {self._win_pid}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            ps_script = f"""
+                $ErrorActionPreference='SilentlyContinue'
+                try {{
+                $p = Get-Process -Id {self._win_pid} -ErrorAction Stop
+                if ($p.MainWindowHandle -ne 0) {{ $null = $p.CloseMainWindow(); Wait-Process -Id {self._win_pid} -Timeout {max(1,int(grace_sec//2))} -ErrorAction SilentlyContinue }}
+                }} catch {{ }}
+                Stop-Process -Id {self._win_pid} -ErrorAction SilentlyContinue
+                exit 0
+                """
+            subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=max(3.0, grace_sec)
+            )
             self._wait_for_exit(timeout=grace_sec)
             if self.is_alive():
                 self.kill()
@@ -233,7 +265,6 @@ class AssetRunner:
                 self._cleanup_files()
             return
 
-
         if not h or not self.is_alive():
             self._cleanup_files()
             return
@@ -241,7 +272,6 @@ class AssetRunner:
             if IS_POSIX:
                 os.killpg(h.popen.pid, signal.SIGTERM)  # type: ignore[arg-type]
             elif IS_WIN:
-                # GUIアプリは CTRL_BREAK を無視することがあるのでフォールバック想定
                 h.popen.send_signal(getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM))  # type: ignore[attr-defined]
             else:
                 h.popen.terminate()
@@ -255,16 +285,24 @@ class AssetRunner:
         else:
             self._cleanup_files()
 
+        self._wait_for_exit(timeout=grace_sec)
+        if self.is_alive():
+            self.kill()
+        else:
+            self._cleanup_files()
+
     def kill(self) -> None:
         # Windows 側 PID を掴んでいる場合は強制終了
         if self._win_pid is not None:
-            subprocess.run(["taskkill.exe", "/PID", str(self._win_pid), "/T", "/F"],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                ["taskkill.exe", "/PID", str(self._win_pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5.0
+            )
             self._wait_for_exit(timeout=2.0)
             self._win_pid = None
             self._cleanup_files()
             return
-                
+
         h = self.handle
         if not h or not self.is_alive():
             self._cleanup_files()
@@ -337,8 +375,8 @@ class AssetRunner:
 # 単体実行 (__main__)
 # ----------------------
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python -m hako_launch.hako_asset_runner <command> [args...] [--grace 2.0]")
+    if len(sys.argv) < 3:
+        print("Usage: python -m hako_launch.hako_asset_runner <command> <cwd> [args...] [--grace 2.0]")
         sys.exit(1)
 
     # 簡易パース
@@ -349,9 +387,9 @@ if __name__ == "__main__":
         grace = float(argv[i+1])
         argv = argv[:i] + argv[i+2:]
     cmd, *args = argv
-
+    cwd = sys.argv[2]
     runner = AssetRunner()
-    h = runner.spawn(cmd, args)
+    h = runner.spawn(cmd, args, cwd=cwd)
     print(f"[runner] spawned PID={h.popen.pid} ({cmd})")
 
     try:
