@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from hakoniwa_pdu.pdu_msgs.geometry_msgs.pdu_pytype_Pose import Pose
 from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_pytype_HakoBatteryStatus import HakoBatteryStatus
 
-import hakoniwa_pdu.apps.drone.hakosim
+import hakoniwa_pdu.apps.drone.hakosim as hakosim
 from hakoniwa_pdu.apps.launcher.hako_launcher import LauncherService
 
 @dataclass

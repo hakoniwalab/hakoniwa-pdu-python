@@ -156,6 +156,8 @@ class ProtocolServerBlocking(ProtocolServerBase):
                     if self.pdu_manager.is_server_event_none(event):
                         await asyncio.sleep(poll_interval)
                     else:
+                        print(f"service_name: {service_name}")
+                        print(f"services: {self.services}")
                         print(f"Unhandled server event: {event}")
                     continue
 

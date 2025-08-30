@@ -35,7 +35,7 @@ class HakoDroneRpcServer(HakoBaseRpcServer):
     def __init__(self, args):
         super().__init__(args)
         self.drone_service = None
-        self.drone_service_config_path = "launcher/config/drone_service.json"
+        self.drone_service_config_path = args.service_config
         logging.info("HakoDroneRpcServer initialized")
 
     def _initialize_launcher(self):
