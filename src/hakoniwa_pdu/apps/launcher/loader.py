@@ -32,13 +32,26 @@ def load_spec(path: str | Path) -> Tuple[LauncherSpec, Path]:
     content = path.read_text(encoding="utf-8")
 
     # Substitute environment variables like ${VAR} or ${VAR:default}
-    pattern = re.compile(r'\\${([A-Za-z0-9_]+)(?::-([^}]+))?\\}')
+    pattern = re.compile(r"\${([A-Za-z0-9_]+)(?::-?([^}]+))?\}")
+
     def replace(match):
         var_name = match.group(1)
         default_value = match.group(2)
-        # 環境変数がセットされていればそれを使う。されてなければデフォルト値。
-        # デフォルト値もなければ空文字。
-        return os.environ.get(var_name, default_value if default_value is not None else '')
+
+        # 実行時プレースホルダは loader では展開しない（runner 等に任せる）
+        if var_name in {"asset", "timestamp"}:
+            return match.group(0)  # そのまま残す
+
+        # 環境変数があれば使う
+        if var_name in os.environ:
+            return os.environ[var_name]
+
+        # デフォルト指定があれば使う（${VAR:-default} / ${VAR:default}）
+        if default_value is not None:
+            return default_value
+
+        # それ以外は元の文字列を残す（空文字で潰さない）
+        return match.group(0)
 
     substituted_content = pattern.sub(replace, content)
 
