@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, AnyHttpUrl, ConfigDict, NonNegativeFloat,
 # =========================
 class EnvOps(BaseModel):
     """環境変数の合成指定（実際の合成は envmerge 側で行う）"""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     set: Optional[Dict[str, str]] = None
     prepend: Optional[Dict[str, List[str]]] = None
@@ -35,7 +35,7 @@ class EnvOps(BaseModel):
 # =========================
 class Defaults(BaseModel):
     """assets 共通の既定値。asset 側で上書き可能。"""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     cwd: Optional[str] = None
     stdout: Optional[str] = None
@@ -49,7 +49,7 @@ class Defaults(BaseModel):
 
 class Asset(BaseModel):
     """起動対象1件の定義。"""
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str
     command: str
@@ -87,14 +87,14 @@ class Asset(BaseModel):
 # Notify（判別ユニオン）
 # =========================
 class NotifyWebhook(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     type: Literal["webhook"] = "webhook"
     url: AnyHttpUrl
     secret: Optional[str] = None
 
 
 class NotifyExec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     type: Literal["exec"] = "exec"
     command: str
     args: List[str] = Field(default_factory=list)
@@ -108,7 +108,7 @@ Notify = Union[NotifyWebhook, NotifyExec]  # discriminator は LaunchSpec 側で
 # =========================
 class LauncherSpec(BaseModel):
     """ランチャ設定のルート。"""
-    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+    model_config = ConfigDict(extra="forbid", use_enum_values=True, str_strip_whitespace=True)
 
     version: Optional[str] = None
     defaults: Optional[Defaults] = None

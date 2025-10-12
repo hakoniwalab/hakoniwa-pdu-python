@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 from .model import LauncherSpec, Asset, Defaults
 from .effective_model import EffectiveAsset, EffectiveSpec
+
 
 def _normalize_path(base: Path, p: Optional[str | Path]) -> Optional[Path]:
     if p is None:
@@ -26,7 +29,20 @@ def load_spec(path: str | Path) -> Tuple[LauncherSpec, Path]:
     base_dir（ファイルの場所）も一緒に返す。
     """
     path = Path(path).expanduser().resolve()
-    data = json.loads(path.read_text(encoding="utf-8"))
+    content = path.read_text(encoding="utf-8")
+
+    # Substitute environment variables like ${VAR} or ${VAR:default}
+    pattern = re.compile(r'\\${([A-Za-z0-9_]+)(?::-([^}]+))?\\}')
+    def replace(match):
+        var_name = match.group(1)
+        default_value = match.group(2)
+        # 環境変数がセットされていればそれを使う。されてなければデフォルト値。
+        # デフォルト値もなければ空文字。
+        return os.environ.get(var_name, default_value if default_value is not None else '')
+
+    substituted_content = pattern.sub(replace, content)
+
+    data = json.loads(substituted_content)
     spec = LauncherSpec(**data)
     return spec, path.parent
 
