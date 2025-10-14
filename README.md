@@ -153,6 +153,122 @@ hakoniwa_pdu/
 
 ---
 
+## 🧰 Hakoniwa Launcher
+
+`hako_launcher.py` orchestrates multiple Hakoniwa assets described in a JSON file. The
+launcher handles environment preparation, process supervision, and optional
+notifications when an asset exits unexpectedly.
+
+### How to run
+
+```bash
+# Basic usage (immediate mode)
+python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json
+
+# Immediate mode with background exit (skip monitoring loop)
+python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json --no-watch
+
+# Interactive control (serve mode)
+python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json --mode serve
+```
+
+* **Immediate mode** (default) performs `activate → hako-cmd start → watch`.
+  * Assets whose `activation_timing` is `"before_start"` are spawned first.
+  * After `hako-cmd start` completes successfully, assets with
+    `"after_start"` are started.
+  * Unless `--no-watch` is specified, the launcher keeps monitoring child
+    processes. If any asset stops, every remaining asset is terminated.
+* **Serve mode** keeps the process alive and accepts commands via STDIN.
+  Available commands: `activate`, `start`, `stop`, `reset`, `terminate`,
+  `status`, `quit`/`exit`.
+
+Set `HAKO_PDU_DEBUG=1` to enable debug logging from the launcher modules.
+
+### Launcher JSON format
+
+The schema is provided at
+`src/hakoniwa_pdu/apps/launcher/schemas/launcher.schema.json`. A minimal
+configuration consists of a version header, optional defaults, and at least one
+asset definition.
+
+```jsonc
+{
+  "version": "0.1",
+  "defaults": {
+    "cwd": ".",
+    "stdout": "logs/${asset}.out",
+    "stderr": "logs/${asset}.err",
+    "start_grace_sec": 1,
+    "delay_sec": 3,
+    "env": {
+      "prepend": {
+        "PATH": ["/usr/bin"]
+      }
+    }
+  },
+  "assets": [
+    {
+      "name": "drone",
+      "command": "linux-main_hako_aircraft_service_px4",
+      "args": ["127.0.0.1", "4560"],
+      "activation_timing": "before_start"
+    }
+  ]
+}
+```
+
+#### Top level keys
+
+| Key        | Description |
+| ---------- | ----------- |
+| `version`  | Free-form version string for the specification.【F:src/hakoniwa_pdu/apps/launcher/model.py†L82-L90】 |
+| `defaults` | Shared defaults applied to every asset when the field is omitted at the asset level. Paths are resolved relative to the launch file.【F:src/hakoniwa_pdu/apps/launcher/loader.py†L47-L91】 |
+| `assets`   | Array of process definitions. Launch order is automatically sorted by `depends_on` while preserving the original order when there is no dependency.【F:src/hakoniwa_pdu/apps/launcher/model.py†L112-L167】 |
+| `notify`   | Optional notification that fires when an asset exits or the launcher aborts. Supports `webhook` and `exec` variants.【F:src/hakoniwa_pdu/apps/launcher/model.py†L58-L80】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L83-L121】 |
+
+#### Defaults block
+
+* `cwd`, `stdout`, `stderr`: default working directory and log sinks for assets.
+  These support `${asset}`, `${timestamp}`, and `${base_dir}` placeholders. The
+  loader resolves relative paths using the directory of the launch file.【F:src/hakoniwa_pdu/apps/launcher/loader.py†L30-L91】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L19-L35】
+* `start_grace_sec`: minimum time (seconds) an asset must stay alive after
+  spawn to be considered healthy (default `5.0`).【F:src/hakoniwa_pdu/apps/launcher/model.py†L40-L54】
+* `delay_sec`: delay inserted before launching the next asset (default `3.0`).【F:src/hakoniwa_pdu/apps/launcher/model.py†L40-L54】
+* `env`: environment operations merged into the runtime environment in three
+  stages: OS env → defaults.env → asset.env. Keys `set`, `prepend`, `append`,
+  and `unset` are supported, and `lib_path` automatically maps to
+  `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`/`PATH` depending on the platform.【F:src/hakoniwa_pdu/apps/launcher/model.py†L12-L37】【F:src/hakoniwa_pdu/apps/launcher/envmerge.py†L1-L103】
+
+Environment variables written as `${VAR}` or `${VAR:-default}` inside the JSON
+are resolved when the file is loaded. Placeholders `${asset}` and `${timestamp}`
+are preserved for runtime expansion inside log paths and environment settings.【F:src/hakoniwa_pdu/apps/launcher/loader.py†L18-L67】
+
+#### Asset entries
+
+| Field                | Description |
+| -------------------- | ----------- |
+| `name`               | Asset identifier. Used for dependency checks and placeholders.【F:src/hakoniwa_pdu/apps/launcher/model.py†L56-L115】 |
+| `command` / `args`   | Executable and argument vector passed to the process.【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L40-L77】 |
+| `cwd`                | Working directory. Defaults to the launch file directory or `defaults.cwd`.【F:src/hakoniwa_pdu/apps/launcher/loader.py†L47-L91】 |
+| `stdout` / `stderr`  | Optional log file destinations. Directories are created automatically and support placeholders. Leave `null` to inherit the parent stream.【F:src/hakoniwa_pdu/apps/launcher/hako_asset_runner.py†L60-L117】 |
+| `delay_sec`          | Wait time before the next asset starts (overrides `defaults.delay_sec`).【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】 |
+| `activation_timing`  | `before_start` launches prior to `hako-cmd start`; `after_start` launches only after a successful `hako-cmd start`.【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】【F:src/hakoniwa_pdu/apps/launcher/hako_launcher.py†L28-L70】 |
+| `depends_on`         | List of other asset names that must start before this one. Cycles are rejected during load.【F:src/hakoniwa_pdu/apps/launcher/model.py†L112-L167】 |
+| `start_grace_sec`    | Asset-specific stability grace period overriding `defaults.start_grace_sec`.【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L40-L77】 |
+| `env`                | Environment overrides merged on top of `defaults.env`. Supports `${asset}`, `${timestamp}`, and `${ENV:VAR}` substitutions at runtime.【F:src/hakoniwa_pdu/apps/launcher/envmerge.py†L14-L103】 |
+
+#### Notify section
+
+* `type: "exec"` executes a local command when the launcher aborts (placeholders
+  `${asset}` and `${timestamp}` are available).【F:src/hakoniwa_pdu/apps/launcher/model.py†L58-L80】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L83-L121】
+* `type: "webhook"` issues an HTTP POST with the event name, asset, and
+  timestamp. Use for integrations such as Slack or monitoring dashboards.【F:src/hakoniwa_pdu/apps/launcher/model.py†L58-L80】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L83-L121】
+
+Refer to the sample JSON provided above for a real-world configuration that
+launches a drone asset together with supporting services.
+
+---
+
 ## 🧭 Class Overview
 
 ### PduManager
