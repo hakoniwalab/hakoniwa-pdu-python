@@ -233,9 +233,7 @@ asset definition.
   loader resolves relative paths using the directory of the launch file.【F:src/hakoniwa_pdu/apps/launcher/loader.py†L30-L91】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L19-L35】
 * `start_grace_sec`: minimum time (seconds) an asset must stay alive after
   spawn to be considered healthy (default `5.0`).【F:src/hakoniwa_pdu/apps/launcher/model.py†L40-L54】
-* `delay_sec`: wait time inserted **after the current asset has launched and survived its
-  `start_grace_sec` window** before the next asset is activated (default `3.0`). This
-  does not delay shutdown; it simply spaces the startup sequence.【F:src/hakoniwa_pdu/apps/launcher/model.py†L40-L54】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L40-L96】
+* `delay_sec`: delay inserted before launching the next asset (default `3.0`).【F:src/hakoniwa_pdu/apps/launcher/model.py†L40-L54】
 * `env`: environment operations merged into the runtime environment in three
   stages: OS env → defaults.env → asset.env. Keys `set`, `prepend`, `append`,
   and `unset` are supported, and `lib_path` automatically maps to
@@ -253,7 +251,7 @@ are preserved for runtime expansion inside log paths and environment settings.�
 | `command` / `args`   | Executable and argument vector passed to the process.【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L40-L77】 |
 | `cwd`                | Working directory. Defaults to the launch file directory or `defaults.cwd`.【F:src/hakoniwa_pdu/apps/launcher/loader.py†L47-L91】 |
 | `stdout` / `stderr`  | Optional log file destinations. Directories are created automatically and support placeholders. Leave `null` to inherit the parent stream.【F:src/hakoniwa_pdu/apps/launcher/hako_asset_runner.py†L60-L117】 |
-| `delay_sec`          | Wait time applied **after this asset finishes its `start_grace_sec` stabilization period and before the launcher proceeds to the next asset** (overrides `defaults.delay_sec`).【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L40-L96】 |
+| `delay_sec`          | Wait time before the next asset starts (overrides `defaults.delay_sec`).【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】 |
 | `activation_timing`  | `before_start` launches prior to `hako-cmd start`; `after_start` launches only after a successful `hako-cmd start`.【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】【F:src/hakoniwa_pdu/apps/launcher/hako_launcher.py†L28-L70】 |
 | `depends_on`         | List of other asset names that must start before this one. Cycles are rejected during load.【F:src/hakoniwa_pdu/apps/launcher/model.py†L112-L167】 |
 | `start_grace_sec`    | Asset-specific stability grace period overriding `defaults.start_grace_sec`.【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L40-L77】 |
