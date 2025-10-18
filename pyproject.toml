@@ -1,6 +1,6 @@
 [project]
 name = "hakoniwa-pdu"
-version = "1.2.5"
+version = "1.2.8"
 description = "Hakoniwa PDU communication library for Python"
 readme = "README.md"
 authors = [
@@ -10,7 +10,7 @@ dependencies = [
   "websockets>=11.0",
   "jsonschema>=4.23.0",
   "pydantic>=2.7.0",
-  "mcp"
+  'mcp==1.0.0'
 ]
 [tool.setuptools.package-data]
 "hakoniwa_pdu.apps.launcher" = ["schemas/**/*.json"]
