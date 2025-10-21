@@ -1,5 +1,6 @@
 from typing import Optional
 import os
+import struct
 import asyncio
 from hakoniwa_pdu.impl.communication_buffer import CommunicationBuffer
 from hakoniwa_pdu.impl.icommunication_service import ICommunicationService
@@ -397,7 +398,11 @@ class PduManager:
             return False
         
         if self.wire_version == "v1":
-            raise NotImplementedError("register rpc service for v1 is not implemented")
+            meta_request_type = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
+            #print(f"[INFO] Declaring PDU (v1): {robot_name}/{pdu_name} as {'READ' if is_read else 'WRITE'}")
+            raw_data = self._build_binary_v1(robot_name, channel_id, struct.pack('<I', meta_request_type))
+            #print(f"[DEBUG] declare_pdu raw_data: {raw_data.hex()}")
+            return await self.comm_service.send_binary(raw_data)
         else:
             meta_request_type = DECLARE_PDU_FOR_READ if is_read else DECLARE_PDU_FOR_WRITE
             raw_data = self._build_binary(meta_request_type, robot_name, channel_id, None)
@@ -423,3 +428,12 @@ class PduManager:
             body_data=pdu_data
         )
         return packet.encode(version = "v2", meta_request_type=meta_request_type)
+
+    def _build_binary_v1(self, robot_name: str, channel_id: int, pdu_data: bytearray) -> bytearray:
+        #print("byte: hex", pdu_data.hex())
+        packet = DataPacket(
+            robot_name=robot_name,
+            channel_id=channel_id,
+            body_data=pdu_data
+        )
+        return packet.encode(version = "v1")
