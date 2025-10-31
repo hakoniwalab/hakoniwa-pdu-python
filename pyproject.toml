@@ -1,6 +1,6 @@
 [project]
 name = "hakoniwa-pdu"
-version = "1.3.1"
+version = "1.3.2"
 description = "Hakoniwa PDU communication library for Python"
 readme = "README.md"
 authors = [

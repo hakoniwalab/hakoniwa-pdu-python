@@ -223,7 +223,7 @@ class ProtocolServerImmediate(ProtocolServerBase):
                 return False
         return True
 
-    def serve(
+    async def serve(
         self,
         handlers: Union[RequestHandler, Dict[str, RequestHandler]],
         poll_interval: float = 0.01,
@@ -258,9 +258,7 @@ class ProtocolServerImmediate(ProtocolServerBase):
             if self.pdu_manager.is_server_event_request_in(event):
                 client_id, req_pdu_data = self.pdu_manager.get_request()
                 try:
-                    res_pdu_data = asyncio.run(
-                        self._handle_request(ctx, client_id, req_pdu_data)
-                    )
+                    res_pdu_data = await self._handle_request(ctx, client_id, req_pdu_data)
                     self.pdu_manager.put_response(client_id, res_pdu_data)
                 except Exception as e:
                     print(f"Error processing request from client {client_id}: {e}")
