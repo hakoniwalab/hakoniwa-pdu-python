@@ -1,5 +1,4 @@
 import asyncio
-import time
 from dataclasses import dataclass
 from typing import Callable, Awaitable, Any, Type, Union, Dict, Optional
 
@@ -243,7 +242,7 @@ class ProtocolServerImmediate(ProtocolServerBase):
                 ctx = self.services.get(service_name)
                 if ctx is None:
                     if self.pdu_manager.is_server_event_none(event):
-                        time.sleep(poll_interval)
+                        await asyncio.sleep(poll_interval)
                     else:
                         print(f"Unhandled server event: {event}")
                     continue
@@ -269,7 +268,7 @@ class ProtocolServerImmediate(ProtocolServerBase):
                 except Exception as e:
                     print(f"Error processing cancel request from client {client_id}: {e}")
             elif self.pdu_manager.is_server_event_none(event):
-                time.sleep(poll_interval)
+                await asyncio.sleep(poll_interval)
             else:
                 print(f"Unhandled server event: {event}")
 
