@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 import json
-import hakopy
+from hakoniwa_pdu._optional_hakopy import hakopy
 from hakoniwa_pdu.impl.hako_binary import offset_map
 from hakoniwa_pdu.impl.pdudef_merge import append_legacy_pdudef
 from hakoniwa_pdu.impl.service_pdudef_builder import (

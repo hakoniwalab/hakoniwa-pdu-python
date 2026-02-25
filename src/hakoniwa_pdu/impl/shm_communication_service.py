@@ -1,5 +1,5 @@
 import asyncio
-import hakopy
+from hakoniwa_pdu._optional_hakopy import hakopy
 from typing import Optional
 from .data_packet import DataPacket
 from .communication_buffer import CommunicationBuffer

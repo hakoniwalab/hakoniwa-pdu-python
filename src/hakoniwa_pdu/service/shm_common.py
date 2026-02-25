@@ -1,6 +1,6 @@
 import json
 import os
-import hakopy
+from hakoniwa_pdu._optional_hakopy import hakopy
 import asyncio
 from hakoniwa_pdu.pdu_manager import PduManager
 from hakoniwa_pdu.impl.shm_communication_service import ShmCommunicationService

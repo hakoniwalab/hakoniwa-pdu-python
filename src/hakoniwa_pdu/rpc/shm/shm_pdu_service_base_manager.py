@@ -1,4 +1,4 @@
-import hakopy
+from hakoniwa_pdu._optional_hakopy import hakopy
 import sys
 import time
 from typing import Any, Dict, Optional

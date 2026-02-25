@@ -1,4 +1,4 @@
-import hakopy
+from hakoniwa_pdu._optional_hakopy import hakopy
 from hakoniwa_pdu.pdu_manager import PduManager
 
 class HakoAssetServiceClient:

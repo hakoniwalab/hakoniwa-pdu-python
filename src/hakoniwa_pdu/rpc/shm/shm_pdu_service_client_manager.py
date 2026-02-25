@@ -1,4 +1,4 @@
-import hakopy
+from hakoniwa_pdu._optional_hakopy import hakopy
 from typing import Optional
 
 from .shm_pdu_service_base_manager import ShmPduServiceBaseManager
