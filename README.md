@@ -42,6 +42,37 @@ Default path if unset:
 /usr/local/lib/hakoniwa/hako_binary/offset
 ```
 
+### PDU Config Formats (`--pdu-config`)
+
+`hakoniwa-pdu-python` accepts both:
+
+* **Compact format** (recommended): `paths` + `robots[].pdutypes_id`
+* **Legacy format**: `robots[].shm_pdu_readers/shm_pdu_writers/...`
+
+Internally, the library normalizes both formats and keeps backward compatibility
+for existing legacy-based APIs.
+
+Compact example (`pdudef.json`):
+
+```json
+{
+  "paths": [
+    { "id": "default", "path": "pdutypes.json" }
+  ],
+  "robots": [
+    { "name": "RobotA", "pdutypes_id": "default" }
+  ]
+}
+```
+
+Compact types file (`pdutypes.json`):
+
+```json
+[
+  { "channel_id": 0, "pdu_size": 72, "name": "pos", "type": "geometry_msgs/Twist" }
+]
+```
+
 ---
 
 ## 🚀 Quick Start (3 commands)
@@ -353,4 +384,3 @@ For detailed API usage:
 ## 📜 License
 
 MIT License — see [LICENSE](./LICENSE)
-

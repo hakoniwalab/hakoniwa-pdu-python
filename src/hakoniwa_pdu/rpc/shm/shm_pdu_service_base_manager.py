@@ -43,29 +43,22 @@ class ShmPduServiceBaseManager(IPduServiceManager):
 
 
     def load_shared_memory_for_safe(self, pdudef: Dict[str, Any]) -> bool:
-        robots = pdudef.get("robots", [])
-        if robots:
-            robot = robots[0]
-            robot_name = robot.get("name")
-            readers = robot.get("shm_pdu_readers", [])
-            if readers:
-                reader = readers[0]
-                channel_id = reader.get("channel_id")
-                pdu_size = reader.get("pdu_size")
-
-                print(f"robot_name={robot_name}")
-                print(f"channel_id={channel_id}")
-                print(f"pdu_size={pdu_size}")
-                #dummy read to initialize shared memory
-                _ = hakopy.pdu_read(robot_name, channel_id, pdu_size)
-            else:
-                print("No shm_pdu_readers found in pdudef.")
-                return False
-        else:
-            print("No robots found in pdudef.")
+        _ = pdudef  # Kept for backward compatibility of callers.
+        readers = self.pdu_config.get_shm_pdu_readers()
+        if not readers:
+            print("No shm_pdu_readers found in pdudef.")
             return False
 
+        reader = readers[0]
+        robot_name = reader.robot_name
+        channel_id = reader.channel_id
+        pdu_size = reader.pdu_size
+
+        print(f"robot_name={robot_name}")
+        print(f"channel_id={channel_id}")
+        print(f"pdu_size={pdu_size}")
+        # dummy read to initialize shared memory
+        _ = hakopy.pdu_read(robot_name, channel_id, pdu_size)
         return True
     
 __all__ = ["ShmPduServiceBaseManager"]
-

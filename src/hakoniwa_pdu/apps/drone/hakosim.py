@@ -1,6 +1,7 @@
 import hakopy
 from hakoniwa_pdu.pdu_manager import PduManager
 from hakoniwa_pdu.impl.shm_communication_service import ShmCommunicationService
+from hakoniwa_pdu.impl.pdu_channel_config import PduChannelConfig
 from hakoniwa_pdu.pdu_msgs.geometry_msgs.pdu_pytype_Twist import Twist
 from hakoniwa_pdu.pdu_msgs.geometry_msgs.pdu_conv_Twist import pdu_to_py_Twist 
 from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_pytype_GameControllerOperation import GameControllerOperation
@@ -57,7 +58,7 @@ class MultirotorClient:
     def __init__(self, config_path, default_drone_name = None):
         self.pdu_manager = None
         self.config_path = config_path
-        self.pdudef = self._load_json(config_path)
+        self.pdudef = PduChannelConfig(config_path).get_pdudef()
         self.vehicles = {}
         self.last_read_time = 0
         default_drone_set = False
