@@ -93,14 +93,13 @@ def binary_write_recursive_MultiArrayLayout(parent_off: int, bw_container: Binar
 
     offset_from_heap = bw_container.heap_allocator.size()
     array_size = len(py_obj.dim)
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
+    bw_container.heap_allocator.add(bytearray(array_size * 136), expected_offset=offset_from_heap)
     for i, elm in enumerate(py_obj.dim):
         one_elm_size =  136
-        binary_write_recursive_MultiArrayDimension((parent_off + i * one_elm_size), bw_container, bw_container.heap_allocator, elm)
+        binary_write_recursive_MultiArrayDimension((offset_from_heap + i * one_elm_size), bw_container, bw_container.heap_allocator, elm)
     
     # array_type: single 
     # data_type: primitive 

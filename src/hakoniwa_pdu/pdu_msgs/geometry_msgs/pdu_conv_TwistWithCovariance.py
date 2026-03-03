@@ -40,7 +40,9 @@ def binary_read_recursive_TwistWithCovariance(meta: binary_io.PduMetaData, binar
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 48, 288)
+    
     py_obj.covariance = binary_io.binToArrayValues("float64", array_value)
+    
     
     return py_obj
 
@@ -95,9 +97,7 @@ def binary_write_recursive_TwistWithCovariance(parent_off: int, bw_container: Bi
     off = 48
 
     
-    elm_size =  288 
-    array_size = int(8.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(8.0)
     binary = binary_io.typeTobin_array(type, py_obj.covariance, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     

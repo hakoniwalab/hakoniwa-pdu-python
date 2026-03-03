@@ -97,7 +97,9 @@ def binary_read_recursive_Image(meta: binary_io.PduMetaData, binary_data: bytear
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 280 + 4, 4))
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.data = array_value
+    
     
     return py_obj
 
@@ -222,14 +224,12 @@ def binary_write_recursive_Image(parent_off: int, bw_container: BinaryWriterCont
     off = 280
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.data)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.data, 1)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
 
 if __name__ == "__main__":

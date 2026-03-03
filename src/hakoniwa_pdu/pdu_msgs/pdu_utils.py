@@ -2,14 +2,14 @@
 
 import struct
 
+from . import binary_io
+
 # PDU MetaData Constants and Layout
-_MAGIC_NUMBER = 0x12345678
-_PDU_VERSION = 1
 _PDU_META_FORMAT = '<IIIII'  # Little-endian: magic, version, base_off, heap_off, total_size, reserved
 _PDU_META_SIZE = struct.calcsize(_PDU_META_FORMAT)
 
-# 8-byte alignment for meta data size
-_ALIGNED_PDU_META_SIZE = (_PDU_META_SIZE + 7) & ~7
+# Use the canonical size from binary_io (already aligned)
+_ALIGNED_PDU_META_SIZE = binary_io.PduMetaData.PDU_META_DATA_SIZE
 
 # Helper for variable-length array reference structure (length and offset)
 _VARRAY_REF_FORMAT = '<ii' # Little-endian: length, offset
@@ -23,13 +23,20 @@ class DynamicAllocator:
 
     def add(self, bytes_data, expected_offset=None, key=None):
         current_size = len(self.data)
-        #print(f"is_heap: {self.is_heap} current_size: {current_size} expected_offset: {expected_offset} len(bytes_data): {len(bytes_data)}")
-        if (current_size < expected_offset):
-            #print("Padding data to align with expected offset")
-            padding = bytearray(expected_offset - current_size)
-            self.data.extend(padding)
-        offset = len(self.data)
-        self.data.extend(bytes_data)
+        data_len = len(bytes_data)
+        if expected_offset is not None:
+            if current_size < expected_offset:
+                padding = bytearray(expected_offset - current_size)
+                self.data.extend(padding)
+                current_size = len(self.data)
+            end_offset = expected_offset + data_len
+            if current_size < end_offset:
+                self.data.extend(bytearray(end_offset - current_size))
+            self.data[expected_offset:end_offset] = bytes_data
+            offset = expected_offset
+        else:
+            offset = len(self.data)
+            self.data.extend(bytes_data)
         #print(f"add: {bytes_data} offset: {offset} len(self.data): {len(self.data)}")
         if key:
             self.offset_map[key] = offset
@@ -76,8 +83,9 @@ def create_pdu(base_data: bytes, heap_data: bytes = b'') -> bytes:
     pdu_buffer = bytearray(total_size)
 
     # Pack MetaData
-    struct.pack_into(_PDU_META_FORMAT, pdu_buffer, 0, 
-                     _MAGIC_NUMBER, _PDU_VERSION, 
+    struct.pack_into(_PDU_META_FORMAT, pdu_buffer, 0,
+                     binary_io.PduMetaData.PDU_META_DATA_MAGICNO,
+                     binary_io.PduMetaData.PDU_META_DATA_VERSION,
                      base_offset, heap_offset, total_size)
 
     # Copy BaseData
@@ -93,12 +101,13 @@ def unpack_pdu(pdu_bytes: bytes) -> (dict, bytes, bytes):
     """
     Disassembles PDU bytes into metadata, base_data, and heap_data.
     """
-    if len(pdu_bytes) < _PDU_META_SIZE:
+    if len(pdu_bytes) < _ALIGNED_PDU_META_SIZE:
         raise ValueError("PDU is too small for metadata")
 
     magic, version, base_off, heap_off, total_size = struct.unpack_from(_PDU_META_FORMAT, pdu_bytes, 0)
 
-    if magic != _MAGIC_NUMBER or version != _PDU_VERSION:
+    if (magic != binary_io.PduMetaData.PDU_META_DATA_MAGICNO or
+            version != binary_io.PduMetaData.PDU_META_DATA_VERSION):
         raise ValueError(f"Invalid PDU MetaData: magic={hex(magic)}, version={version}")
 
     metadata = {

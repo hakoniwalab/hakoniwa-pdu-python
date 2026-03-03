@@ -117,7 +117,9 @@ def binary_read_recursive_PointCloud2(meta: binary_io.PduMetaData, binary_data: 
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 164 + 4, 4))
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.data = array_value
+    
     
     # array_type: single 
     # data_type: primitive 
@@ -212,14 +214,13 @@ def binary_write_recursive_PointCloud2(parent_off: int, bw_container: BinaryWrit
 
     offset_from_heap = bw_container.heap_allocator.size()
     array_size = len(py_obj.fields)
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
+    bw_container.heap_allocator.add(bytearray(array_size * 140), expected_offset=offset_from_heap)
     for i, elm in enumerate(py_obj.fields):
         one_elm_size =  140
-        binary_write_recursive_PointField((parent_off + i * one_elm_size), bw_container, bw_container.heap_allocator, elm)
+        binary_write_recursive_PointField((offset_from_heap + i * one_elm_size), bw_container, bw_container.heap_allocator, elm)
     
     # array_type: single 
     # data_type: primitive 
@@ -273,14 +274,12 @@ def binary_write_recursive_PointCloud2(parent_off: int, bw_container: BinaryWrit
     off = 164
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.data)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.data, 1)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: single 
     # data_type: primitive 

@@ -42,7 +42,9 @@ def binary_read_recursive_JointState(meta: binary_io.PduMetaData, binary_data: b
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 136 + 4, 4))
     one_elm_size = 128 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
-    py_obj.name = array_value
+    
+    py_obj.name = binary_io.binToArrayValues("string", array_value, array_size, one_elm_size)
+    
     
     # array_type: varray 
     # data_type: primitive 
@@ -55,7 +57,9 @@ def binary_read_recursive_JointState(meta: binary_io.PduMetaData, binary_data: b
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 144 + 4, 4))
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.position = array_value
+    
     
     # array_type: varray 
     # data_type: primitive 
@@ -68,7 +72,9 @@ def binary_read_recursive_JointState(meta: binary_io.PduMetaData, binary_data: b
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 152 + 4, 4))
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.velocity = array_value
+    
     
     # array_type: varray 
     # data_type: primitive 
@@ -81,7 +87,9 @@ def binary_read_recursive_JointState(meta: binary_io.PduMetaData, binary_data: b
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 160 + 4, 4))
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.effort = array_value
+    
     
     return py_obj
 
@@ -136,14 +144,12 @@ def binary_write_recursive_JointState(parent_off: int, bw_container: BinaryWrite
     off = 136
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.name)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.name, 128)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: varray 
     # data_type: primitive 
@@ -155,14 +161,12 @@ def binary_write_recursive_JointState(parent_off: int, bw_container: BinaryWrite
     off = 144
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.position)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.position, 8)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: varray 
     # data_type: primitive 
@@ -174,14 +178,12 @@ def binary_write_recursive_JointState(parent_off: int, bw_container: BinaryWrite
     off = 152
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.velocity)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.velocity, 8)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: varray 
     # data_type: primitive 
@@ -193,14 +195,12 @@ def binary_write_recursive_JointState(parent_off: int, bw_container: BinaryWrite
     off = 160
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.effort)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.effort, 8)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
 
 if __name__ == "__main__":

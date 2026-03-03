@@ -119,7 +119,9 @@ def binary_read_recursive_LaserScan(meta: binary_io.PduMetaData, binary_data: by
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 164 + 4, 4))
     one_elm_size = 4 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.ranges = array_value
+    
     
     # array_type: varray 
     # data_type: primitive 
@@ -132,7 +134,9 @@ def binary_read_recursive_LaserScan(meta: binary_io.PduMetaData, binary_data: by
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 172 + 4, 4))
     one_elm_size = 4 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.intensities = array_value
+    
     
     return py_obj
 
@@ -285,14 +289,12 @@ def binary_write_recursive_LaserScan(parent_off: int, bw_container: BinaryWriter
     off = 164
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.ranges)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.ranges, 4)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: varray 
     # data_type: primitive 
@@ -304,14 +306,12 @@ def binary_write_recursive_LaserScan(parent_off: int, bw_container: BinaryWriter
     off = 172
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.intensities)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.intensities, 4)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
 
 if __name__ == "__main__":

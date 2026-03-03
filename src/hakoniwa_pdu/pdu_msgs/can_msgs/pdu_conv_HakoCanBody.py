@@ -28,7 +28,9 @@ def binary_read_recursive_HakoCanBody(meta: binary_io.PduMetaData, binary_data: 
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 0, 8)
+    
     py_obj.data = binary_io.binToArrayValues("uint8", array_value)
+    
     
     return py_obj
 
@@ -72,9 +74,7 @@ def binary_write_recursive_HakoCanBody(parent_off: int, bw_container: BinaryWrit
     off = 0
 
     
-    elm_size =  8 
-    array_size = int(1.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(1.0)
     binary = binary_io.typeTobin_array(type, py_obj.data, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     

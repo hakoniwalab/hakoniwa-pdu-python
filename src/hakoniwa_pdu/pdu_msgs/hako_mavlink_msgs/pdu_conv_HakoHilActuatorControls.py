@@ -39,7 +39,9 @@ def binary_read_recursive_HakoHilActuatorControls(meta: binary_io.PduMetaData, b
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 8, 64)
+    
     py_obj.controls = binary_io.binToArrayValues("float32", array_value)
+    
     
     # array_type: single 
     # data_type: primitive 
@@ -119,9 +121,7 @@ def binary_write_recursive_HakoHilActuatorControls(parent_off: int, bw_container
     off = 8
 
     
-    elm_size =  64 
-    array_size = int(4.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(4.0)
     binary = binary_io.typeTobin_array(type, py_obj.controls, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     

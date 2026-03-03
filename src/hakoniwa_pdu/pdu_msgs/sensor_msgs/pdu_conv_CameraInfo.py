@@ -76,7 +76,9 @@ def binary_read_recursive_CameraInfo(meta: binary_io.PduMetaData, binary_data: b
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 272 + 4, 4))
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.d = array_value
+    
     
     # array_type: array 
     # data_type: primitive 
@@ -87,7 +89,9 @@ def binary_read_recursive_CameraInfo(meta: binary_io.PduMetaData, binary_data: b
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 280, 72)
+    
     py_obj.k = binary_io.binToArrayValues("float64", array_value)
+    
     
     # array_type: array 
     # data_type: primitive 
@@ -98,7 +102,9 @@ def binary_read_recursive_CameraInfo(meta: binary_io.PduMetaData, binary_data: b
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 352, 72)
+    
     py_obj.r = binary_io.binToArrayValues("float64", array_value)
+    
     
     # array_type: array 
     # data_type: primitive 
@@ -109,7 +115,9 @@ def binary_read_recursive_CameraInfo(meta: binary_io.PduMetaData, binary_data: b
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 424, 96)
+    
     py_obj.p = binary_io.binToArrayValues("float64", array_value)
+    
     
     # array_type: single 
     # data_type: primitive 
@@ -239,14 +247,12 @@ def binary_write_recursive_CameraInfo(parent_off: int, bw_container: BinaryWrite
     off = 272
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.d)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.d, 8)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: array 
     # data_type: primitive 
@@ -258,9 +264,7 @@ def binary_write_recursive_CameraInfo(parent_off: int, bw_container: BinaryWrite
     off = 280
 
     
-    elm_size =  72 
-    array_size = int(8.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(8.0)
     binary = binary_io.typeTobin_array(type, py_obj.k, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
@@ -274,9 +278,7 @@ def binary_write_recursive_CameraInfo(parent_off: int, bw_container: BinaryWrite
     off = 352
 
     
-    elm_size =  72 
-    array_size = int(8.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(8.0)
     binary = binary_io.typeTobin_array(type, py_obj.r, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
@@ -290,9 +292,7 @@ def binary_write_recursive_CameraInfo(parent_off: int, bw_container: BinaryWrite
     off = 424
 
     
-    elm_size =  96 
-    array_size = int(8.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(8.0)
     binary = binary_io.typeTobin_array(type, py_obj.p, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     

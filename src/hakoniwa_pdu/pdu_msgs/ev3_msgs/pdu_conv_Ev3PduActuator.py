@@ -41,7 +41,9 @@ def binary_read_recursive_Ev3PduActuator(meta: binary_io.PduMetaData, binary_dat
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 152, 1)
+    
     py_obj.leds = binary_io.binToArrayValues("uint8", array_value)
+    
     
     # array_type: array 
     # data_type: struct 
@@ -125,9 +127,7 @@ def binary_write_recursive_Ev3PduActuator(parent_off: int, bw_container: BinaryW
     off = 152
 
     
-    elm_size =  1 
-    array_size = int(1.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(1.0)
     binary = binary_io.typeTobin_array(type, py_obj.leds, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
@@ -141,9 +141,7 @@ def binary_write_recursive_Ev3PduActuator(parent_off: int, bw_container: BinaryW
     off = 156
 
     for i, elm in enumerate(py_obj.motors):
-        elm_size = 36
-        array_size = int(12.0)
-        one_elm_size = int(elm_size / array_size)
+        one_elm_size = int(12.0)
         binary_write_recursive_Ev3PduMotor((parent_off + off + i * one_elm_size), bw_container, allocator, elm)
     
     # array_type: single 

@@ -39,7 +39,9 @@ def binary_read_recursive_HakoHilStateQuaternion(meta: binary_io.PduMetaData, bi
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 8, 16)
+    
     py_obj.attitude_quaternion = binary_io.binToArrayValues("float32", array_value)
+    
     
     # array_type: single 
     # data_type: primitive 
@@ -251,9 +253,7 @@ def binary_write_recursive_HakoHilStateQuaternion(parent_off: int, bw_container:
     off = 8
 
     
-    elm_size =  16 
-    array_size = int(4.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(4.0)
     binary = binary_io.typeTobin_array(type, py_obj.attitude_quaternion, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     

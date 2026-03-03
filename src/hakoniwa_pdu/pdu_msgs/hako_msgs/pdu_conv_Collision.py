@@ -164,9 +164,7 @@ def binary_write_recursive_Collision(parent_off: int, bw_container: BinaryWriter
     off = 32
 
     for i, elm in enumerate(py_obj.contact_position):
-        elm_size = 240
-        array_size = int(24.0)
-        one_elm_size = int(elm_size / array_size)
+        one_elm_size = int(24.0)
         binary_write_recursive_Point((parent_off + off + i * one_elm_size), bw_container, allocator, elm)
     
     # array_type: single 

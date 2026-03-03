@@ -17,7 +17,7 @@ def binToint32(binary):
     return struct.unpack('i', binary)[0]
 
 def binTobool(binary):
-    return struct.unpack('i', binary)[0]
+    return struct.unpack('i', binary)[0] != 0
 
 def binToint64(binary):
     return struct.unpack('q', binary)[0]
@@ -66,7 +66,7 @@ def int32Tobin(arg):
     return struct.pack('i', arg)
 
 def boolTobin(arg):
-    return struct.pack('i', arg)
+    return struct.pack('i', 1 if arg else 0)
 
 def int64Tobin(arg):
     return struct.pack('q', arg)
@@ -147,8 +147,12 @@ def binTovalue(type, arg):
         return binTostring(arg)
     else:
         return None
-def binToArrayValues(type, arg):
+def binToArrayValues(type, arg, array_len=None, elm_size=None):
     # little endian
+    if array_len is not None:
+        array_len = int(array_len)
+    if elm_size is not None:
+        elm_size = int(elm_size)
     if (type == "int8"):
         return struct.unpack(f'<{len(arg)}b', arg)
     elif (type == "uint8"):
@@ -160,7 +164,7 @@ def binToArrayValues(type, arg):
     elif (type == "int32"):
         return struct.unpack(f'<{len(arg)//4}i', arg)
     elif (type == "bool"):
-        return struct.unpack(f'<{len(arg)//4}i', arg)
+        return tuple(value != 0 for value in struct.unpack(f'<{len(arg)//4}i', arg))
     elif (type == "uint32"):
         return struct.unpack(f'<{len(arg)//4}I', arg)
     elif (type == "int64"):
@@ -171,6 +175,15 @@ def binToArrayValues(type, arg):
         return struct.unpack(f'<{len(arg)//4}f', arg)
     elif (type == "float64"):
         return struct.unpack(f'<{len(arg)//8}d', arg)
+    elif (type == "string"):
+        if array_len is None or elm_size is None:
+            raise ValueError("array_len and elm_size required for string array")
+        values = []
+        for index in range(array_len):
+            start = index * elm_size
+            end = start + elm_size
+            values.append(binTostring(arg[start:end], elm_size))
+        return values
     else:
         return None
 
@@ -187,7 +200,8 @@ def typeTobin_array(type, values, elm_size=None):
     elif type == "int32":
         return struct.pack(f'<{count}i', *values)
     elif type == "bool":
-        return struct.pack(f'<{count}i', *values)
+        normalized = [1 if value else 0 for value in values]
+        return struct.pack(f'<{count}i', *normalized)
     elif type == "uint32":
         return struct.pack(f'<{count}I', *values)
     elif type == "int64":

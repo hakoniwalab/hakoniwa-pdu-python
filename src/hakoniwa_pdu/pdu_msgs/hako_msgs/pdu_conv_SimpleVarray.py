@@ -30,7 +30,9 @@ def binary_read_recursive_SimpleVarray(meta: binary_io.PduMetaData, binary_data:
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 0 + 4, 4))
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
+    
     py_obj.data = array_value
+    
     
     # array_type: array 
     # data_type: primitive 
@@ -41,7 +43,9 @@ def binary_read_recursive_SimpleVarray(meta: binary_io.PduMetaData, binary_data:
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 8, 10)
+    
     py_obj.fixed_array = binary_io.binToArrayValues("int8", array_value)
+    
     
     # array_type: single 
     # data_type: primitive 
@@ -96,14 +100,12 @@ def binary_write_recursive_SimpleVarray(parent_off: int, bw_container: BinaryWri
     off = 0
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.data)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.data, 1)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: array 
     # data_type: primitive 
@@ -115,9 +117,7 @@ def binary_write_recursive_SimpleVarray(parent_off: int, bw_container: BinaryWri
     off = 8
 
     
-    elm_size =  10 
-    array_size = int(1.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(1.0)
     binary = binary_io.typeTobin_array(type, py_obj.fixed_array, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     

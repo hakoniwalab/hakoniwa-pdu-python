@@ -42,7 +42,9 @@ def binary_read_recursive_Ev3PduSensor(meta: binary_io.PduMetaData, binary_data:
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 152, 1)
+    
     py_obj.buttons = binary_io.binToArrayValues("uint8", array_value)
+    
     
     # array_type: array 
     # data_type: struct 
@@ -89,7 +91,9 @@ def binary_read_recursive_Ev3PduSensor(meta: binary_io.PduMetaData, binary_data:
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 204, 12)
+    
     py_obj.motor_angle = binary_io.binToArrayValues("uint32", array_value)
+    
     
     # array_type: single 
     # data_type: primitive 
@@ -199,9 +203,7 @@ def binary_write_recursive_Ev3PduSensor(parent_off: int, bw_container: BinaryWri
     off = 152
 
     
-    elm_size =  1 
-    array_size = int(1.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(1.0)
     binary = binary_io.typeTobin_array(type, py_obj.buttons, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
@@ -215,9 +217,7 @@ def binary_write_recursive_Ev3PduSensor(parent_off: int, bw_container: BinaryWri
     off = 156
 
     for i, elm in enumerate(py_obj.color_sensors):
-        elm_size = 40
-        array_size = int(20.0)
-        one_elm_size = int(elm_size / array_size)
+        one_elm_size = int(20.0)
         binary_write_recursive_Ev3PduColorSensor((parent_off + off + i * one_elm_size), bw_container, allocator, elm)
     
     # array_type: array 
@@ -230,9 +230,7 @@ def binary_write_recursive_Ev3PduSensor(parent_off: int, bw_container: BinaryWri
     off = 196
 
     for i, elm in enumerate(py_obj.touch_sensors):
-        elm_size = 8
-        array_size = int(4.0)
-        one_elm_size = int(elm_size / array_size)
+        one_elm_size = int(4.0)
         binary_write_recursive_Ev3PduTouchSensor((parent_off + off + i * one_elm_size), bw_container, allocator, elm)
     
     # array_type: array 
@@ -245,9 +243,7 @@ def binary_write_recursive_Ev3PduSensor(parent_off: int, bw_container: BinaryWri
     off = 204
 
     
-    elm_size =  12 
-    array_size = int(4.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(4.0)
     binary = binary_io.typeTobin_array(type, py_obj.motor_angle, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     

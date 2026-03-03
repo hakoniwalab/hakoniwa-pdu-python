@@ -41,7 +41,9 @@ def binary_read_recursive_SimpleStructVarray(meta: binary_io.PduMetaData, binary
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 4, 256)
-    py_obj.fixed_str = binary_io.binToArrayValues("string", array_value)
+    
+    py_obj.fixed_str = binary_io.binToArrayValues("string", array_value, 2, 256 / 2)
+    
     
     # array_type: varray 
     # data_type: primitive 
@@ -54,7 +56,9 @@ def binary_read_recursive_SimpleStructVarray(meta: binary_io.PduMetaData, binary
     offset_from_heap = binary_io.binTovalue("int32", binary_io.readBinary(binary_data, base_off + 260 + 4, 4))
     one_elm_size = 128 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
-    py_obj.varray_str = array_value
+    
+    py_obj.varray_str = binary_io.binToArrayValues("string", array_value, array_size, one_elm_size)
+    
     
     # array_type: array 
     # data_type: struct 
@@ -149,9 +153,7 @@ def binary_write_recursive_SimpleStructVarray(parent_off: int, bw_container: Bin
     off = 4
 
     
-    elm_size =  256 
-    array_size = int(128.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(128.0)
     binary = binary_io.typeTobin_array(type, py_obj.fixed_str, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
@@ -165,14 +167,12 @@ def binary_write_recursive_SimpleStructVarray(parent_off: int, bw_container: Bin
     off = 260
 
     offset_from_heap = bw_container.heap_allocator.size()
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     array_size = len(py_obj.varray_str)
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
     binary = binary_io.typeTobin_array(type, py_obj.varray_str, 128)
-    bw_container.heap_allocator.add(binary, expected_offset=0)
+    bw_container.heap_allocator.add(binary)
     
     # array_type: array 
     # data_type: struct 
@@ -184,9 +184,7 @@ def binary_write_recursive_SimpleStructVarray(parent_off: int, bw_container: Bin
     off = 268
 
     for i, elm in enumerate(py_obj.fixed_array):
-        elm_size = 120
-        array_size = int(24.0)
-        one_elm_size = int(elm_size / array_size)
+        one_elm_size = int(24.0)
         binary_write_recursive_SimpleVarray((parent_off + off + i * one_elm_size), bw_container, allocator, elm)
     
     # array_type: varray 
@@ -200,14 +198,13 @@ def binary_write_recursive_SimpleStructVarray(parent_off: int, bw_container: Bin
 
     offset_from_heap = bw_container.heap_allocator.size()
     array_size = len(py_obj.data)
-    if allocator.is_heap:
-        offset_from_heap += 8 # 8 bytes for array_size and offset
     a_b = array_size.to_bytes(4, byteorder='little')
     o_b = offset_from_heap.to_bytes(4, byteorder='little')
     allocator.add(a_b + o_b, expected_offset=parent_off + off)
+    bw_container.heap_allocator.add(bytearray(array_size * 24), expected_offset=offset_from_heap)
     for i, elm in enumerate(py_obj.data):
         one_elm_size =  24
-        binary_write_recursive_SimpleVarray((parent_off + i * one_elm_size), bw_container, bw_container.heap_allocator, elm)
+        binary_write_recursive_SimpleVarray((offset_from_heap + i * one_elm_size), bw_container, bw_container.heap_allocator, elm)
     
 
 if __name__ == "__main__":

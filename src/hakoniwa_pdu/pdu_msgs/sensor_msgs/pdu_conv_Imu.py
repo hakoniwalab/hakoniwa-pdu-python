@@ -54,7 +54,9 @@ def binary_read_recursive_Imu(meta: binary_io.PduMetaData, binary_data: bytearra
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 168, 72)
+    
     py_obj.orientation_covariance = binary_io.binToArrayValues("float64", array_value)
+    
     
     # array_type: single 
     # data_type: struct 
@@ -76,7 +78,9 @@ def binary_read_recursive_Imu(meta: binary_io.PduMetaData, binary_data: bytearra
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 264, 72)
+    
     py_obj.angular_velocity_covariance = binary_io.binToArrayValues("float64", array_value)
+    
     
     # array_type: single 
     # data_type: struct 
@@ -98,7 +102,9 @@ def binary_read_recursive_Imu(meta: binary_io.PduMetaData, binary_data: bytearra
 
     
     array_value = binary_io.readBinary(binary_data, base_off + 360, 72)
+    
     py_obj.linear_acceleration_covariance = binary_io.binToArrayValues("float64", array_value)
+    
     
     return py_obj
 
@@ -164,9 +170,7 @@ def binary_write_recursive_Imu(parent_off: int, bw_container: BinaryWriterContai
     off = 168
 
     
-    elm_size =  72 
-    array_size = int(8.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(8.0)
     binary = binary_io.typeTobin_array(type, py_obj.orientation_covariance, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
@@ -191,9 +195,7 @@ def binary_write_recursive_Imu(parent_off: int, bw_container: BinaryWriterContai
     off = 264
 
     
-    elm_size =  72 
-    array_size = int(8.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(8.0)
     binary = binary_io.typeTobin_array(type, py_obj.angular_velocity_covariance, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
@@ -218,9 +220,7 @@ def binary_write_recursive_Imu(parent_off: int, bw_container: BinaryWriterContai
     off = 360
 
     
-    elm_size =  72 
-    array_size = int(8.0)
-    one_elm_size = int(elm_size / array_size)
+    one_elm_size = int(8.0)
     binary = binary_io.typeTobin_array(type, py_obj.linear_acceleration_covariance, one_elm_size)
     allocator.add(binary, expected_offset=(parent_off + off))
     
