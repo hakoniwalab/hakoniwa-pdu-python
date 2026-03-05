@@ -1,14 +1,13 @@
 import struct
 from typing import Optional
 from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_pytype_MetaPdu import MetaPdu
-from hakoniwa_pdu.pdu_msgs.hako_msgs.pdu_conv_MetaPdu import py_to_pdu_MetaPdu, pdu_to_py_MetaPdu
-from hakoniwa_pdu.impl.hako_binary.binary_io import PduMetaData
 
 # 固定値（必要に応じて既存定義と統合）
 HAKO_META_MAGIC = 0x48414B4F  # "HAKO"
 HAKO_META_VER   = 0x0002
+ROBOT_NAME_FIXED_SIZE = 128
 META_FIXED_SIZE = 176
-TOTAL_PDU_META_SIZE = PduMetaData.PDU_META_DATA_SIZE + META_FIXED_SIZE
+TOTAL_PDU_META_SIZE = ROBOT_NAME_FIXED_SIZE + META_FIXED_SIZE
 
 # Magic numbers used for special control packets
 DECLARE_PDU_FOR_READ = 0x52455044   # "REPD"
@@ -87,18 +86,27 @@ class DataPacket:
         body_len = len(self.body_data)  # = [HakoMeta24 + Base+Heap] の総長
         self.meta_pdu.magicno = HAKO_META_MAGIC
         self.meta_pdu.version = HAKO_META_VER
-        self.meta_pdu.flags = 0  # not supported
+        self.meta_pdu.flags = 0
         self.meta_pdu.meta_request_type = meta_request_type if meta_request_type is not None else 0
         self.meta_pdu.body_len = body_len
         # 「自分（4B）を除く残り」
         self.meta_pdu.total_len = (META_FIXED_SIZE - 4) + body_len
-
-        encoded_data = py_to_pdu_MetaPdu(self.meta_pdu)  # 304B
-        # 念のため: 304B保証（生成コード依存だが崩れたら即気づける）
-        assert len(encoded_data) == TOTAL_PDU_META_SIZE, f"unexpected meta size: {len(encoded_data)}"
-
-        encoded_data.extend(self.body_data)              # + [HakoMeta24 + Base+Heap]
-        return encoded_data
+        header = bytearray(TOTAL_PDU_META_SIZE)
+        self._write_fixed_string(header, 0, ROBOT_NAME_FIXED_SIZE, self.meta_pdu.robot_name)
+        base_off = ROBOT_NAME_FIXED_SIZE
+        struct.pack_into("<I", header, base_off + 0, self.meta_pdu.magicno)
+        struct.pack_into("<H", header, base_off + 4, self.meta_pdu.version)
+        struct.pack_into("<H", header, base_off + 6, self.meta_pdu.flags)
+        struct.pack_into("<I", header, base_off + 8, 0)  # reserved
+        struct.pack_into("<I", header, base_off + 12, self.meta_pdu.meta_request_type)
+        struct.pack_into("<I", header, base_off + 16, self.meta_pdu.total_len)
+        struct.pack_into("<I", header, base_off + 20, self.meta_pdu.body_len)
+        struct.pack_into("<Q", header, base_off + 24, self.meta_pdu.hako_time_us)
+        struct.pack_into("<Q", header, base_off + 32, self.meta_pdu.asset_time_us)
+        struct.pack_into("<Q", header, base_off + 40, self.meta_pdu.real_time_us)
+        struct.pack_into("<i", header, base_off + 48, self.meta_pdu.channel_id)
+        header.extend(self.body_data)
+        return header
 
 
     def _encode_v1(self) -> bytearray:
@@ -139,15 +147,26 @@ class DataPacket:
         if frame is None or len(frame) < TOTAL_PDU_META_SIZE:
             return None
 
-        meta: MetaPdu = pdu_to_py_MetaPdu(frame)
-        if meta is None or meta.version != HAKO_META_VER or meta.magicno != HAKO_META_MAGIC:
+        base_off = ROBOT_NAME_FIXED_SIZE
+        meta = MetaPdu()
+        meta.robot_name = cls._read_fixed_string(frame, 0, ROBOT_NAME_FIXED_SIZE)
+        meta.magicno = struct.unpack_from("<I", frame, base_off + 0)[0]
+        meta.version = struct.unpack_from("<H", frame, base_off + 4)[0]
+        meta.flags = struct.unpack_from("<H", frame, base_off + 6)[0]
+        meta.meta_request_type = struct.unpack_from("<I", frame, base_off + 12)[0]
+        meta.total_len = struct.unpack_from("<I", frame, base_off + 16)[0]
+        meta.body_len = struct.unpack_from("<I", frame, base_off + 20)[0]
+        meta.hako_time_us = struct.unpack_from("<Q", frame, base_off + 24)[0]
+        meta.asset_time_us = struct.unpack_from("<Q", frame, base_off + 32)[0]
+        meta.real_time_us = struct.unpack_from("<Q", frame, base_off + 40)[0]
+        meta.channel_id = struct.unpack_from("<i", frame, base_off + 48)[0]
+        if meta.version != HAKO_META_VER or meta.magicno != HAKO_META_MAGIC:
+            return None
+        end = TOTAL_PDU_META_SIZE + meta.body_len
+        if len(frame) < end:
             return None
 
-        body_view = cls._slice_body_safely(frame)
-        if body_view is None:
-            return None
-
-        pkt = cls(meta=meta, body_data=bytearray(body_view))
+        pkt = cls(meta=meta, body_data=bytearray(frame[TOTAL_PDU_META_SIZE:end]))
         return pkt
 
     @staticmethod
@@ -174,3 +193,18 @@ class DataPacket:
         body = data[index:] if index < len(data) else bytearray()
 
         return DataPacket(robot_name, channel_id, bytearray(body))
+
+    @staticmethod
+    def _write_fixed_string(buf: bytearray, off: int, size: int, value: str) -> None:
+        buf[off:off + size] = b"\x00" * size
+        raw = (value or "").encode("utf-8")
+        copy_len = min(len(raw), size - 1)
+        buf[off:off + copy_len] = raw[:copy_len]
+
+    @staticmethod
+    def _read_fixed_string(buf: bytes, off: int, size: int) -> str:
+        raw = bytes(buf[off:off + size])
+        nul = raw.find(b"\x00")
+        if nul >= 0:
+            raw = raw[:nul]
+        return raw.decode("utf-8", errors="ignore")
