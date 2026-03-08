@@ -75,6 +75,8 @@ PDU_SIZE = {
     "hako_msgs/DisturbanceUserCustom": 8,
     "hako_msgs/DisturbanceWind": 24,
     "hako_msgs/DroneStatus": 40,
+    "hako_msgs/DroneVisualState": 32,
+    "hako_msgs/DroneVisualStateArray": 32,
     "hako_msgs/ExecutionUnitRuntimeContext": 16,
     "hako_msgs/ExecutionUnitRuntimeEpoch": 8,
     "hako_msgs/ExecutionUnitRuntimeNode": 8,
