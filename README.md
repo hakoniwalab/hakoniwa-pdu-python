@@ -184,6 +184,14 @@ hakoniwa_pdu/
 
 ---
 
+## 📝 Design Notes
+
+RPC client redesign notes for large-scale SHM fan-out:
+
+- `docs/rpc/async_shared_runtime.md`
+
+---
+
 ## 🧰 Hakoniwa Launcher
 
 `hako_launcher.py` orchestrates multiple Hakoniwa assets described in a JSON file. The
