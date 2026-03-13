@@ -119,9 +119,9 @@ async def main(argv: list[str] | None = None) -> int:
     parser.add_argument("launch_file", help="Path to launcher JSON")
     parser.add_argument(
         "--mode",
-        choices=["immediate", "serve"],
+        choices=["immediate", "activate-only", "serve"],
         default="immediate",
-        help="immediate: activate→start→watch / serve: 待機して外部コマンドを受け付ける",
+        help="immediate: activate→start→watch / activate-only: activateだけ実行して待機 / serve: 待機して外部コマンドを受け付ける",
     )
     parser.add_argument("--no-watch", action="store_true",
                         help="(immediate時) 監視せず起動だけして終了")
@@ -159,6 +159,17 @@ async def main(argv: list[str] | None = None) -> int:
                 while service.status() not in ("TERMINATED",):
                     time.sleep(0.5)
             return 0 if rc == 0 else rc
+        except Exception as e:
+            print(f"[launcher] Exception: {e}", file=sys.stderr)
+            service.terminate()
+            return 1
+
+    elif args.mode == "activate-only":
+        try:
+            service.activate()
+            while service.status() not in ("TERMINATED",):
+                time.sleep(0.5)
+            return 0
         except Exception as e:
             print(f"[launcher] Exception: {e}", file=sys.stderr)
             service.terminate()
