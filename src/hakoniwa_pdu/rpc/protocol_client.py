@@ -147,9 +147,10 @@ class ProtocolClientBlocking(ProtocolClientBase):
 
         is_timeout, response_data = await self._wait_response()
         if is_timeout:
-            print("Request timed out.")
             await self.cancel()
-            return None
+            raise TimeoutError(
+                f"request timeout then canceled: service={self.service_name} client={self.client_name}"
+            )
         return response_data
 
     async def cancel(self) -> bool:
@@ -221,7 +222,9 @@ class ProtocolClientImmediate(ProtocolClientBase):
         is_timeout, response_data = self._wait_response()
         if is_timeout:
             self.cancel()
-            return None
+            raise TimeoutError(
+                f"request timeout then canceled: service={self.service_name} client={self.client_name}"
+            )
         return response_data
 
     def cancel(self) -> bool:
