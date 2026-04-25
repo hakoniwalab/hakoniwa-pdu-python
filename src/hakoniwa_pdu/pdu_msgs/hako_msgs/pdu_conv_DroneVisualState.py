@@ -97,7 +97,7 @@ def binary_read_recursive_DroneVisualState(meta: binary_io.PduMetaData, binary_d
     one_elm_size = 4 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.pwm_duty = array_value
+    py_obj.pwm_duty = binary_io.binToArrayValues("float32", array_value)
     
     
     return py_obj

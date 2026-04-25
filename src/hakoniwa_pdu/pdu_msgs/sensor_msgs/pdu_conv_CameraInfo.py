@@ -77,7 +77,7 @@ def binary_read_recursive_CameraInfo(meta: binary_io.PduMetaData, binary_data: b
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.d = array_value
+    py_obj.d = binary_io.binToArrayValues("float64", array_value)
     
     
     # array_type: array 

@@ -120,7 +120,7 @@ def binary_read_recursive_LaserScan(meta: binary_io.PduMetaData, binary_data: by
     one_elm_size = 4 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.ranges = array_value
+    py_obj.ranges = binary_io.binToArrayValues("float32", array_value)
     
     
     # array_type: varray 
@@ -135,7 +135,7 @@ def binary_read_recursive_LaserScan(meta: binary_io.PduMetaData, binary_data: by
     one_elm_size = 4 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.intensities = array_value
+    py_obj.intensities = binary_io.binToArrayValues("float32", array_value)
     
     
     return py_obj

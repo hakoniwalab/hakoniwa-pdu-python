@@ -43,7 +43,7 @@ def binary_read_recursive_UInt16MultiArray(meta: binary_io.PduMetaData, binary_d
     one_elm_size = 2 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.data = array_value
+    py_obj.data = binary_io.binToArrayValues("uint16", array_value)
     
     
     return py_obj

@@ -53,7 +53,7 @@ def binary_read_recursive_ExecutionUnitRuntimeStatus(meta: binary_io.PduMetaData
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.status = array_value
+    py_obj.status = binary_io.binToArrayValues("uint8", array_value)
     
     
     # array_type: varray 
@@ -68,7 +68,7 @@ def binary_read_recursive_ExecutionUnitRuntimeStatus(meta: binary_io.PduMetaData
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.epoch = array_value
+    py_obj.epoch = binary_io.binToArrayValues("uint8", array_value)
     
     
     # array_type: varray 
@@ -83,7 +83,7 @@ def binary_read_recursive_ExecutionUnitRuntimeStatus(meta: binary_io.PduMetaData
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.curr_owner_node_id = array_value
+    py_obj.curr_owner_node_id = binary_io.binToArrayValues("uint8", array_value)
     
     
     # array_type: varray 
@@ -98,7 +98,7 @@ def binary_read_recursive_ExecutionUnitRuntimeStatus(meta: binary_io.PduMetaData
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.next_owner_node_id = array_value
+    py_obj.next_owner_node_id = binary_io.binToArrayValues("uint8", array_value)
     
     
     return py_obj

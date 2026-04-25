@@ -58,7 +58,7 @@ def binary_read_recursive_JointState(meta: binary_io.PduMetaData, binary_data: b
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.position = array_value
+    py_obj.position = binary_io.binToArrayValues("float64", array_value)
     
     
     # array_type: varray 
@@ -73,7 +73,7 @@ def binary_read_recursive_JointState(meta: binary_io.PduMetaData, binary_data: b
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.velocity = array_value
+    py_obj.velocity = binary_io.binToArrayValues("float64", array_value)
     
     
     # array_type: varray 
@@ -88,7 +88,7 @@ def binary_read_recursive_JointState(meta: binary_io.PduMetaData, binary_data: b
     one_elm_size = 8 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.effort = array_value
+    py_obj.effort = binary_io.binToArrayValues("float64", array_value)
     
     
     return py_obj

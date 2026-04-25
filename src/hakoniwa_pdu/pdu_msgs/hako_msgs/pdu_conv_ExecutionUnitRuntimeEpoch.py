@@ -31,7 +31,7 @@ def binary_read_recursive_ExecutionUnitRuntimeEpoch(meta: binary_io.PduMetaData,
     one_elm_size = 1 
     array_value = binary_io.readBinary(binary_data, meta.heap_off + offset_from_heap, one_elm_size * array_size)
     
-    py_obj.epoch = array_value
+    py_obj.epoch = binary_io.binToArrayValues("uint8", array_value)
     
     
     return py_obj
