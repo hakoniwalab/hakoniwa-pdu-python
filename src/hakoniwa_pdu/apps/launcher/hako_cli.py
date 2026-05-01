@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import shutil
 import subprocess
@@ -11,10 +12,10 @@ from .envmerge import merge_env
 
 class HakoCli:
     """
-    hako-cmd を前面実行（フォアグラウンド）で叩く薄いラッパー。
-    - PATH は defaults.env を OS 環境にマージして解決
-    - 実行は launch.json のディレクトリ（base_dir）をカレントにして行う
-    - 出力は親プロセスにそのまま流す（capture しない）
+    Thin wrapper to run hako-cmd in the foreground.
+    - Resolve PATH after merging defaults.env into the OS environment
+    - Run from the launch.json directory (base_dir)
+    - Inherit the parent process stdout/stderr without capturing output
     """
 
     def __init__(
@@ -25,7 +26,7 @@ class HakoCli:
         cmd: str = "hako-cmd",
     ) -> None:
         self.spec = spec
-        self.defaults_env_ops = defaults_env_ops  # PATH/lib_path はここで合成
+        self.defaults_env_ops = defaults_env_ops  # PATH/lib_path are merged here.
         self.cmd = cmd
 
     # ---- public ----
@@ -39,22 +40,34 @@ class HakoCli:
         return self._run("reset", timeout=timeout)
 
     # ---- internals ----
+    def _resolve_cmd(self, env: dict[str, str]) -> str:
+        path = env.get("PATH")
+        candidates = [self.cmd]
+        # On WSL/Linux, bare command names do not auto-resolve to .exe.
+        if os.name != "nt" and not self.cmd.lower().endswith(".exe"):
+            candidates.append(f"{self.cmd}.exe")
+
+        for candidate in candidates:
+            resolved = shutil.which(candidate, path=path)
+            if resolved is not None:
+                return resolved
+
+        raise FileNotFoundError(
+            f"'{self.cmd}' was not found. Check PATH "
+            f"(current PATH head: { (path or '').split(os.pathsep)[0] if path else '<empty>' })"
+        )
+
     def _run(self, subcmd: Literal["start", "stop", "reset"], *, timeout: Optional[float]) -> int:
-        # env は defaults.env のみ（アセット個別は関係ない）
+        # Only defaults.env applies here; per-asset env settings are irrelevant.
         env = merge_env(defaults_env=self.defaults_env_ops, asset_env=None, asset_name="hako_cli")
 
-        # which でコマンド確認（PATH は合成済み env で探索）
-        resolved = shutil.which(self.cmd, path=env.get("PATH"))
-        if resolved is None:
-            raise FileNotFoundError(
-                f"'{self.cmd}' が見つかりません。PATH を確認してください "
-                f"(現在の PATH 先頭: { (env.get('PATH') or '').split(':')[0] if env.get('PATH') else '<empty>' })"
-            )
+        # Resolve the command against the merged PATH.
+        resolved = self._resolve_cmd(env)
 
-        # 前面実行：親の stdout/stderr を引き継ぐ
+        # Run in the foreground and inherit the parent stdout/stderr.
         try:
             proc = subprocess.run(
-                [self.cmd, subcmd],
+                [resolved, subcmd],
                 cwd=str(self.spec.base_dir),
                 env=env,
                 check=False,
@@ -62,5 +75,5 @@ class HakoCli:
             )
             return int(proc.returncode)
         except subprocess.TimeoutExpired:
-            # タイムアウトも呼び出し側で扱いやすいよう非例外で返す
-            return 124  # bash 由来の慣例（timeout の終了コード）
+            # Return a conventional timeout exit code instead of raising.
+            return 124  # Conventional exit code used by timeout on Unix-like systems.
