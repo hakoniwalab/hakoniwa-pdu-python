@@ -278,7 +278,7 @@ class HakoMcpDroneServer(HakoMcpBaseServer):
                 result_pdu = await self._send_rpc_command("DroneService/LiDARScan", req)
                 if result_pdu and result_pdu.ok:
                     # PointCloud2からフラットなXYZリストを抽出
-                    point_cloud_bytes = result_pdu.point_cloud.data
+                    point_cloud_bytes = bytes(result_pdu.point_cloud.data)
                     row_step = result_pdu.point_cloud.row_step
                     height = result_pdu.point_cloud.height
                     total_data_bytes = height * row_step

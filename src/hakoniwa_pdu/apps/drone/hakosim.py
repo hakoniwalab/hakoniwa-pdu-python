@@ -466,7 +466,10 @@ class MultirotorClient:
                 return None
             lidar_pos_pdu_data = pdu_to_py_Twist(raw_data)
             time_stamp = lidar_pdu_data.header.stamp.sec
-            point_cloud_bytes = lidar_pdu_data.data
+            # Generated PDU converters currently deserialize uint8[] as a tuple.
+            # Normalize to bytes here because downstream LiDAR parsing expects
+            # a bytes-like object, similar to the camera API behavior.
+            point_cloud_bytes = bytes(lidar_pdu_data.data)
             height = lidar_pdu_data.height
             row_step = lidar_pdu_data.row_step
             total_data_bytes = height * row_step
