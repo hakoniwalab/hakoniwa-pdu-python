@@ -6,7 +6,7 @@ import threading
 from typing import Any, Callable
 
 from ..shm.shm_pdu_service_client_manager import ShmPduServiceClientManager
-from .profile import ScopedTimer
+from ..profile import ScopedTimer
 from .rpc_call_future import RpcCallFuture
 
 

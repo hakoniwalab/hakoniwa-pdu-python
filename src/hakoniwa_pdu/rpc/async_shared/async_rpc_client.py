@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Type
 
-from .profile import ScopedTimer
+from ..profile import ScopedTimer
 from .rpc_call_future import RpcCallFuture
 from .shared_rpc_runtime import RegisteredClientContext, SharedRpcRuntime
 

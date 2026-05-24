@@ -9,7 +9,7 @@ from ..ipdu_service_manager import (
     Event,
 )
 from ..service_config import ServiceConfig
-from ..async_shared.profile import ScopedTimer
+from ..profile import ScopedTimer
 
 
 class ShmPduServiceClientManager(

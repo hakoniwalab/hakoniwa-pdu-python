@@ -172,9 +172,11 @@ hakoniwa_pdu/
 │   └── hako_binary/
 ├── rpc/
 │   ├── ipdu_service_manager.py
+│   ├── profile.py
 │   ├── protocol_client.py
 │   ├── protocol_server.py
 │   ├── auto_wire.py
+│   ├── async_shared/
 │   ├── remote/
 │   └── shm/
 ├── resources/
@@ -189,6 +191,57 @@ hakoniwa_pdu/
 RPC client redesign notes for large-scale SHM fan-out:
 
 - `docs/rpc/async_shared_runtime.md`
+
+---
+
+## ⚡ Shared SHM RPC Runtime
+
+For high fan-out SHM RPC workloads, `hakoniwa-pdu-python` also provides a
+shared client runtime under `hakoniwa_pdu.rpc.async_shared`.
+
+Core classes:
+
+* `SharedRpcRuntime`: owns one shared `ShmPduServiceClientManager`, client registration cache, and pending request table.
+* `AsyncRpcClientHandle`: lightweight logical RPC client bound to one service/client pair.
+* `RpcCallFuture`: completion handle returned by `call_async()`.
+
+Typical usage:
+
+```python
+from hakoniwa_pdu.rpc.async_shared import AsyncRpcClientHandle, SharedRpcRuntime
+
+runtime = SharedRpcRuntime(
+    asset_name="DroneExternalClient",
+    pdu_config_path="pdu_config.json",
+    service_config_path="service.json",
+    offset_path="offset",
+    delta_time_usec=10000,
+)
+
+client = AsyncRpcClientHandle(
+    runtime=runtime,
+    service_name="MyService",
+    client_name="MyClient",
+    cls_req_packet=ReqPacket,
+    req_encoder=req_encoder,
+    req_decoder=req_decoder,
+    cls_res_packet=ResPacket,
+    res_encoder=res_encoder,
+    res_decoder=res_decoder,
+)
+
+client.register()
+future = client.call_async(request_data, timeout_msec=30000, poll_interval=0.01)
+
+while not future.done():
+    runtime.poll_once()
+
+response = future.result()
+```
+
+Use this path when one Python process needs to manage many concurrent SHM RPC
+clients efficiently. For the detailed design and ownership model, see
+`docs/rpc/async_shared_runtime.md`.
 
 ---
 
@@ -328,8 +381,10 @@ launches a drone asset together with supporting services.
 * `IPduServiceManager` family provides RPC APIs (client/server).
 * `protocol_client.py` / `protocol_server.py`: user-friendly helpers.
 * `auto_wire.py`: auto-loads generated converters.
+* `async_shared/`: shared SHM RPC runtime for manual/background polling and many logical clients per process.
 * `remote/`: WebSocket managers.
 * `shm/`: SHM managers.
+* `profile.py`: lightweight profiling helpers shared by RPC components.
 
 ---
 
