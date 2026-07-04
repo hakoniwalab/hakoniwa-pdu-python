@@ -18,6 +18,7 @@ class Range:
     min_range: float
     max_range: float
     range: float
+    variance: float
 
     def __init__(self):
         self.header = Header()
@@ -26,6 +27,7 @@ class Range:
         self.min_range = 0.0
         self.max_range = 0.0
         self.range = 0.0
+        self.variance = 0.0
 
     def __str__(self):
         return f"Range(" + ", ".join([
@@ -35,6 +37,7 @@ class Range:
             f"min_range={self.min_range}"
             f"max_range={self.max_range}"
             f"range={self.range}"
+            f"variance={self.variance}"
         ]) + ")"
 
     def __repr__(self):
@@ -105,6 +108,16 @@ class Range:
             d['range'] = [item.to_dict() if hasattr(item, 'to_dict') else item for item in field_val]
         else:
             d['range'] = field_val
+        # handle field 'variance'
+        field_val = self.variance
+        if isinstance(field_val, bytearray):
+            d['variance'] = list(field_val)
+        elif hasattr(field_val, 'to_dict'):
+            d['variance'] = field_val.to_dict()
+        elif isinstance(field_val, list):
+            d['variance'] = [item.to_dict() if hasattr(item, 'to_dict') else item for item in field_val]
+        else:
+            d['variance'] = field_val
         return d
 
     @classmethod
@@ -215,6 +228,23 @@ class Range:
                 obj.range = field_type.from_dict(value)
             else:
                 obj.range = value
+        # handle field 'variance'
+        if 'variance' in d:
+            field_type = cls.__annotations__.get('variance')
+            value = d['variance']
+            
+            if field_type is bytearray:
+                obj.variance = bytearray(value)
+            elif hasattr(field_type, '__origin__') and field_type.__origin__ is list:
+                list_item_type = field_type.__args__[0]
+                if hasattr(list_item_type, 'from_dict'):
+                    obj.variance = [list_item_type.from_dict(item) for item in value]
+                else:
+                    obj.variance = value
+            elif hasattr(field_type, 'from_dict'):
+                obj.variance = field_type.from_dict(value)
+            else:
+                obj.variance = value
         return obj
 
     def to_json(self, indent=2):

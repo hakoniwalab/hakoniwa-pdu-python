@@ -86,6 +86,17 @@ def binary_read_recursive_Range(meta: binary_io.PduMetaData, binary_data: bytear
     bin = binary_io.readBinary(binary_data, base_off + 152, 4)
     py_obj.range = binary_io.binTovalue("float32", bin)
     
+    # array_type: single 
+    # data_type: primitive 
+    # member_name: variance 
+    # type_name: float32 
+    # offset: 156 size: 4 
+    # array_len: 1
+
+    
+    bin = binary_io.readBinary(binary_data, base_off + 156, 4)
+    py_obj.variance = binary_io.binTovalue("float32", bin)
+    
     return py_obj
 
 
@@ -196,6 +207,20 @@ def binary_write_recursive_Range(parent_off: int, bw_container: BinaryWriterCont
 
     
     bin = binary_io.typeTobin(type, py_obj.range)
+    bin = get_binary(type, bin, 4)
+    allocator.add(bin, expected_offset=parent_off + off)
+    
+    # array_type: single 
+    # data_type: primitive 
+    # member_name: variance 
+    # type_name: float32 
+    # offset: 156 size: 4 
+    # array_len: 1
+    type = "float32"
+    off = 156
+
+    
+    bin = binary_io.typeTobin(type, py_obj.variance)
     bin = get_binary(type, bin, 4)
     allocator.add(bin, expected_offset=parent_off + off)
     
