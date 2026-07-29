@@ -1,0 +1,8 @@
+version: 1
+
+build:
+  dir: .hako/build
+  install_dir: .hako/install
+
+paths:
+  hakoniwa_core_root: ""
