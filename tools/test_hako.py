@@ -92,6 +92,27 @@ class ManifestTests(unittest.TestCase):
                 [[sys.executable, "-c", "import pip"]],
             )
 
+    def test_hakopy_path_uses_windows_extension(self):
+        args = HAKO.create_parser().parse_args(["doctor"])
+        ctx = HAKO.Context(
+            args,
+            self.config(),
+            HAKO.repo_root() / "hakoniwa-build.yaml",
+        )
+        ctx.core_root = Path("foundation")
+
+        ctx.os_name = "windows"
+        self.assertEqual(
+            HAKO._hakopy_path(ctx),
+            Path("foundation/share/hakoniwa/python/hakopy.pyd"),
+        )
+
+        ctx.os_name = "linux"
+        self.assertEqual(
+            HAKO._hakopy_path(ctx),
+            Path("foundation/share/hakoniwa/python/hakopy.so"),
+        )
+
     def test_build_uses_pep517_isolation(self):
         args = HAKO.create_parser().parse_args(["build"])
         ctx = HAKO.Context(

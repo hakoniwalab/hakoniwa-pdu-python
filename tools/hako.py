@@ -165,6 +165,19 @@ def _run(command: list[str], cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
+def _hakopy_path(ctx: Context) -> Path | None:
+    if ctx.core_root is None:
+        return None
+    suffix = ".pyd" if ctx.os_name == "windows" else ".so"
+    return (
+        ctx.core_root
+        / "share"
+        / "hakoniwa"
+        / "python"
+        / f"hakopy{suffix}"
+    )
+
+
 def doctor(ctx: Context) -> list[str]:
     errors: list[str] = []
     if sys.version_info < (3, 12):
@@ -177,11 +190,7 @@ def doctor(ctx: Context) -> list[str]:
         )
         if result.returncode:
             errors.append(f"Python build prerequisite is missing: {module}")
-    hakopy = (
-        ctx.core_root / "share" / "hakoniwa" / "python" / "hakopy.so"
-        if ctx.core_root
-        else None
-    )
+    hakopy = _hakopy_path(ctx)
     if hakopy is None or not hakopy.is_file():
         errors.append(
             "Foundation Core hakopy is required; set paths.hakoniwa_core_root "
