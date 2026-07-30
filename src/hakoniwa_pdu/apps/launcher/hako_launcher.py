@@ -15,16 +15,18 @@ from typing import Optional
 from .loader import load
 from .hako_monitor import HakoMonitor
 from .hako_cli import HakoCli
-from .hako_launcher_background import (
+from .hako_launcher_control import (
     LauncherControlError,
     LauncherControlServer,
-    is_terminal_session,
+    claim_session,
+    new_session_id,
     read_session,
     send_control_command,
-    write_session,
+    write_owned_session,
 )
 
 _BACKGROUND_READY_TIMEOUT_SEC = 60.0
+_BACKGROUND_SHUTDOWN_TIMEOUT_SEC = 30.0
 
 
 class LauncherService:
@@ -53,7 +55,12 @@ class LauncherService:
             self.monitor = HakoMonitor(self.spec, defaults_env_ops=self.defaults_env_ops)
 
         print("[INFO] activating 'before_start' assets...")
-        self.monitor.start_assets("before_start")
+        self.state = "ACTIVATING"
+        try:
+            self.monitor.start_assets("before_start")
+        except Exception:
+            self.terminate()
+            raise
         self._stop_watch.clear()
         self._watch_thread = threading.Thread(target=self._watch_loop, daemon=True)
         self._watch_thread.start()
@@ -87,14 +94,19 @@ class LauncherService:
         return rc
 
     def terminate(self) -> None:
-        if self.state in ("TERMINATED", "IDLE"):
+        if self.state == "TERMINATED":
             print(f"[launcher] terminate: already {self.state}")
             return
+        if self.state == "IDLE" and not self.monitor.procs:
+            print("[launcher] terminate: already IDLE")
+            return
         print("[INFO] terminating all assets...")
-        self.monitor.abort("terminate")
-        self._stop_watch.set()
-        self.state = "TERMINATED"
-        print("[INFO] state -> TERMINATED")
+        try:
+            self.monitor.abort("terminate")
+        finally:
+            self._stop_watch.set()
+            self.state = "TERMINATED"
+            print("[INFO] state -> TERMINATED")
 
     def status(self) -> str:
         return self.state
@@ -143,12 +155,64 @@ def _stop_background_process(proc: subprocess.Popen) -> None:
             proc.send_signal(signal.CTRL_BREAK_EVENT)
         else:
             proc.send_signal(signal.SIGINT)
-        proc.wait(timeout=5)
-    except Exception:
+        proc.wait(timeout=_BACKGROUND_SHUTDOWN_TIMEOUT_SEC)
+    except subprocess.TimeoutExpired:
         try:
             proc.kill()
+            proc.wait(timeout=5)
         except Exception:
             pass
+    except Exception:
+        pass
+
+
+def _starting_session_payload(
+    *,
+    session_id: str,
+    launch_path: Path,
+    log_path: Path,
+    pid: int,
+) -> dict:
+    return {
+        "version": 1,
+        "session_id": session_id,
+        "pid": pid,
+        "launch_file": str(launch_path),
+        "log_file": str(log_path),
+        "state": "STARTING",
+    }
+
+
+def _reserve_background_session(
+    *,
+    launch_path: Path,
+    session_path: Path,
+    log_path: Path,
+) -> tuple[str | None, int]:
+    session_id = new_session_id()
+    try:
+        claim_session(
+            session_path,
+            _starting_session_payload(
+                session_id=session_id,
+                launch_path=launch_path,
+                log_path=log_path,
+                pid=os.getpid(),
+            ),
+        )
+    except FileExistsError:
+        print(
+            f"[launcher] another launcher reserved the session file: {session_path}",
+            file=sys.stderr,
+        )
+        return None, 2
+    except LauncherControlError as exc:
+        print(f"[launcher] {exc}", file=sys.stderr)
+        return None, 2
+    except OSError as exc:
+        print(f"[launcher] cannot reserve session file {session_path}: {exc}", file=sys.stderr)
+        return None, 1
+    return session_id, 0
 
 
 def _spawn_background(launch_file: str, session_file: str) -> int:
@@ -157,27 +221,13 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
     log_path = _background_log_path(session_path)
     session_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if session_path.exists():
-        try:
-            existing = read_session(session_path)
-            if not is_terminal_session(existing):
-                try:
-                    response = send_control_command(session_path, "status", timeout_sec=1.0)
-                    print(
-                        f"[launcher] background session is already active: "
-                        f"{session_path} (state={response.get('state')})",
-                        file=sys.stderr,
-                    )
-                    return 2
-                except LauncherControlError:
-                    print(f"[launcher] replacing stale session file: {session_path}", file=sys.stderr)
-        except LauncherControlError as exc:
-            print(
-                f"[launcher] refusing to overwrite unreadable session file: {session_path}: {exc}",
-                file=sys.stderr,
-            )
-            return 2
-        session_path.unlink(missing_ok=True)
+    session_id, reserve_rc = _reserve_background_session(
+        launch_path=launch_path,
+        session_path=session_path,
+        log_path=log_path,
+    )
+    if session_id is None:
+        return reserve_rc
 
     command = [
         sys.executable,
@@ -186,6 +236,8 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
         str(launch_path),
         "--_background-worker",
         str(session_path),
+        "--_session-id",
+        session_id,
     ]
     popen_kwargs = {
         "stdin": subprocess.DEVNULL,
@@ -197,19 +249,45 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
     else:
         popen_kwargs["start_new_session"] = True
 
-    with log_path.open("w", encoding="utf-8") as log_stream:
-        popen_kwargs["stdout"] = log_stream
-        try:
+    try:
+        with log_path.open("w", encoding="utf-8") as log_stream:
+            popen_kwargs["stdout"] = log_stream
             proc = subprocess.Popen(command, **popen_kwargs)
-        except OSError as exc:
-            print(f"[launcher] failed to start background launcher: {exc}", file=sys.stderr)
-            return 1
+    except OSError as exc:
+        _write_failed_session(
+            session_path,
+            launch_path,
+            log_path,
+            f"failed to start background launcher: {exc}",
+            session_id=session_id,
+            pid=os.getpid(),
+        )
+        print(f"[launcher] failed to start background launcher: {exc}", file=sys.stderr)
+        return 1
+
+    write_owned_session(
+        session_path,
+        _starting_session_payload(
+            session_id=session_id,
+            launch_path=launch_path,
+            log_path=log_path,
+            pid=proc.pid,
+        ),
+        session_id=session_id,
+    )
 
     deadline = time.monotonic() + _BACKGROUND_READY_TIMEOUT_SEC
     while time.monotonic() < deadline:
         if session_path.exists():
             try:
                 session = read_session(session_path)
+                if session.get("session_id") != session_id:
+                    print(
+                        f"[launcher] session ownership changed during startup: {session_path}",
+                        file=sys.stderr,
+                    )
+                    _stop_background_process(proc)
+                    return 1
                 state = str(session.get("state", "UNKNOWN"))
                 if state == "FAILED":
                     print(
@@ -218,22 +296,31 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
                         file=sys.stderr,
                     )
                     return 1
-                response = send_control_command(session_path, "status", timeout_sec=1.0)
-                print(
-                    json.dumps(
-                        {
-                            "session_file": str(session_path),
-                            "pid": response.get("pid"),
-                            "state": response.get("state"),
-                            "log_file": str(log_path),
-                        }
+                if state != "STARTING":
+                    response = send_control_command(session_path, "status", timeout_sec=1.0)
+                    print(
+                        json.dumps(
+                            {
+                                "session_file": str(session_path),
+                                "pid": response.get("pid"),
+                                "state": response.get("state"),
+                                "log_file": str(log_path),
+                            }
+                        )
                     )
-                )
-                return 0
+                    return 0
             except LauncherControlError:
                 pass
         rc = proc.poll()
         if rc is not None:
+            _write_failed_session(
+                session_path,
+                launch_path,
+                log_path,
+                f"background launcher exited before becoming ready: rc={rc}",
+                session_id=session_id,
+                pid=proc.pid,
+            )
             print(
                 f"[launcher] background launcher exited before becoming ready: rc={rc} "
                 f"(log={log_path})",
@@ -248,6 +335,14 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
         file=sys.stderr,
     )
     _stop_background_process(proc)
+    _write_failed_session(
+        session_path,
+        launch_path,
+        log_path,
+        "timed out waiting for background launcher readiness",
+        session_id=session_id,
+        pid=proc.pid,
+    )
     return 1
 
 
@@ -256,17 +351,22 @@ def _write_failed_session(
     launch_file: Path,
     log_file: Path,
     error: str,
+    *,
+    session_id: str,
+    pid: int | None = None,
 ) -> None:
-    write_session(
+    write_owned_session(
         session_file,
         {
             "version": 1,
-            "pid": os.getpid(),
+            "session_id": session_id,
+            "pid": os.getpid() if pid is None else pid,
             "launch_file": str(launch_file),
             "log_file": str(log_file),
             "state": "FAILED",
             "error": error,
         },
+        session_id=session_id,
     )
 
 
@@ -274,6 +374,7 @@ def _run_background_worker(
     service: LauncherService,
     launch_file: str,
     session_file: str,
+    session_id: str,
 ) -> int:
     session_path = Path(session_file).expanduser().resolve()
     launch_path = Path(launch_file).expanduser().resolve()
@@ -289,6 +390,7 @@ def _run_background_worker(
             session_path=session_path,
             launch_file=launch_path,
             log_file=log_path,
+            session_id=session_id,
         )
         server.serve_until_terminated()
         return 0
@@ -297,7 +399,13 @@ def _run_background_worker(
             service.terminate()
         except Exception:
             pass
-        _write_failed_session(session_path, launch_path, log_path, str(exc))
+        _write_failed_session(
+            session_path,
+            launch_path,
+            log_path,
+            str(exc),
+            session_id=session_id,
+        )
         print(f"[launcher] background worker failed: {exc}", file=sys.stderr)
         return 1
     finally:
@@ -324,12 +432,15 @@ async def main(argv: list[str] | None = None) -> int:
         help="Launch in the background and write lifecycle control information to SESSION_FILE",
     )
     parser.add_argument("--_background-worker", metavar="SESSION_FILE", help=argparse.SUPPRESS)
+    parser.add_argument("--_session-id", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     if args.background is not None:
         if args.mode != "immediate" or args.no_watch:
             parser.error("--background cannot be combined with --mode or --no-watch")
         return _spawn_background(args.launch_file, args.background)
+    if args._background_worker is not None and args._session_id is None:
+        parser.error("--_session-id is required for a background worker")
 
     # Setup logging
     if os.environ.get('HAKO_PDU_DEBUG') == '1':
@@ -354,6 +465,7 @@ async def main(argv: list[str] | None = None) -> int:
                 launch_path,
                 _background_log_path(session_path),
                 f"failed to load spec: {e}",
+                session_id=args._session_id,
             )
         print(f"[launcher] Failed to load spec: {e}", file=sys.stderr)
         return 1
@@ -365,7 +477,12 @@ async def main(argv: list[str] | None = None) -> int:
         print(f" - {a.name} (cwd={a.cwd}, cmd={a.command}, args={a.args})")
 
     if args._background_worker is not None:
-        return _run_background_worker(service, args.launch_file, args._background_worker)
+        return _run_background_worker(
+            service,
+            args.launch_file,
+            args._background_worker,
+            args._session_id,
+        )
 
     if args.mode == "immediate":
         try:

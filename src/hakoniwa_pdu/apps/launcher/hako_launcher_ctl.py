@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from .hako_launcher_background import (
+from .hako_launcher_control import (
     LauncherControlError,
     is_terminal_session,
     read_session,
