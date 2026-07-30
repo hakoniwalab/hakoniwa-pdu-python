@@ -262,6 +262,10 @@ python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json --no-watc
 
 # Interactive control (serve mode)
 python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json --mode serve
+
+# OS-independent background lifecycle control
+python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json \
+  --background ./run/launcher-session.json
 ```
 
 * **Immediate mode** (default) performs `activate → hako-cmd start → watch`.
@@ -275,6 +279,10 @@ python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json --mode se
   `status`, `quit`/`exit`.
 
 Set `HAKO_PDU_DEBUG=1` to enable debug logging from the launcher modules.
+
+For background `status` / `terminate` commands, session ownership, startup
+failure handling, and stale-session behavior, see
+[`docs/launcher-background-lifecycle.md`](docs/launcher-background-lifecycle.md).
 
 ### Launcher JSON format
 

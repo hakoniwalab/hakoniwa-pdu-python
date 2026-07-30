@@ -9,7 +9,12 @@ python -m hakoniwa_pdu.apps.launcher.hako_launcher path/to/launch.json \
   --background ./run/launcher-session.json
 ```
 
-The command returns only after the background Launcher has activated the assets, completed `hako-cmd start`, opened its localhost control endpoint, and written the session file.
+Before spawning the worker, the command reserves the explicitly supplied session
+path without overwriting an existing file. It returns successfully only after
+the background Launcher has activated the assets, completed `hako-cmd start`,
+opened its localhost control endpoint, written the session atomically, and
+answered a `status` request. Startup failure is reported with a non-zero exit
+code and a retained `FAILED` session.
 
 The Launcher writes its own stdout/stderr to `<session-file>.log` and prints a JSON summary containing the session path, PID, state, and log path.
 
@@ -39,8 +44,21 @@ The session file is retained after termination with `state: "TERMINATED"` for po
 
 ## Session ownership and stale files
 
-The session file contains the Launcher's PID, localhost control endpoint, and a random token. The control endpoint verifies both the token and expected PID before accepting lifecycle commands.
+The session file contains a per-run session ID, the Launcher's PID, localhost
+control endpoint, and a random token. The control endpoint verifies the session
+ID, token, and expected PID before accepting lifecycle commands. The control
+client refuses non-localhost endpoints.
 
 If the session file is stale and the endpoint cannot be reached, `hako_launcher_ctl` reports `STALE` and does not fall back to killing the recorded PID. This avoids terminating an unrelated process after PID reuse.
 
-Starting with `--background` refuses to overwrite a live session. A terminal or unreachable stale session file at the same explicit path may be replaced by the new run.
+Starting with `--background` refuses to overwrite a live session. A terminal
+session may be reused. An unreachable non-terminal session is reused only when
+its recorded owner process is no longer alive; an unreachable session whose PID
+is alive is treated as ambiguous and is not overwritten. PID probing is used
+only for this conservative stale check—the recorded PID is never used as a
+termination target.
+
+Session inspection and initial reservation are serialized with an adjacent
+implementation-private lock file. This does not create or depend on a global
+session directory; the caller-supplied session file remains the external
+lifecycle contract.
