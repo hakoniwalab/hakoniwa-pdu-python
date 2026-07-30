@@ -6,12 +6,26 @@ import signal
 import threading
 import time
 import asyncio
+import json
 import logging
+import subprocess
+from pathlib import Path
 from typing import Optional
 
 from .loader import load
 from .hako_monitor import HakoMonitor
 from .hako_cli import HakoCli
+from .hako_launcher_background import (
+    LauncherControlError,
+    LauncherControlServer,
+    is_terminal_session,
+    read_session,
+    send_control_command,
+    write_session,
+)
+
+_BACKGROUND_READY_TIMEOUT_SEC = 60.0
+
 
 class LauncherService:
     """起動・監視・停止を状態付きで提供。"""
@@ -103,16 +117,195 @@ class LauncherService:
             self.state = "TERMINATED"
             self._stop_watch.set()
 
-# -------- CLI エントリ --------
+
+# -------- background lifecycle --------
+
+def _background_log_path(session_file: Path) -> Path:
+    return Path(f"{session_file}.log")
+
 
 def _install_sigint(service: LauncherService):
-    def _sigint_handler(signum, frame):
-        print("[launcher] SIGINT received → aborting...")
+    def _signal_handler(signum, frame):
+        print(f"[launcher] signal({signum}) received → aborting...")
         try:
             service.terminate()
         finally:
             sys.exit(1)
-    signal.signal(signal.SIGINT, _sigint_handler)
+
+    signal.signal(signal.SIGINT, _signal_handler)
+    if hasattr(signal, "SIGBREAK"):
+        signal.signal(signal.SIGBREAK, _signal_handler)
+
+
+def _stop_background_process(proc: subprocess.Popen) -> None:
+    try:
+        if os.name == "nt" and hasattr(signal, "CTRL_BREAK_EVENT"):
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            proc.send_signal(signal.SIGINT)
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _spawn_background(launch_file: str, session_file: str) -> int:
+    launch_path = Path(launch_file).expanduser().resolve()
+    session_path = Path(session_file).expanduser().resolve()
+    log_path = _background_log_path(session_path)
+    session_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if session_path.exists():
+        try:
+            existing = read_session(session_path)
+            if not is_terminal_session(existing):
+                try:
+                    response = send_control_command(session_path, "status", timeout_sec=1.0)
+                    print(
+                        f"[launcher] background session is already active: "
+                        f"{session_path} (state={response.get('state')})",
+                        file=sys.stderr,
+                    )
+                    return 2
+                except LauncherControlError:
+                    print(f"[launcher] replacing stale session file: {session_path}", file=sys.stderr)
+        except LauncherControlError as exc:
+            print(
+                f"[launcher] refusing to overwrite unreadable session file: {session_path}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
+        session_path.unlink(missing_ok=True)
+
+    command = [
+        sys.executable,
+        "-m",
+        "hakoniwa_pdu.apps.launcher.hako_launcher",
+        str(launch_path),
+        "--_background-worker",
+        str(session_path),
+    ]
+    popen_kwargs = {
+        "stdin": subprocess.DEVNULL,
+        "stderr": subprocess.STDOUT,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    with log_path.open("w", encoding="utf-8") as log_stream:
+        popen_kwargs["stdout"] = log_stream
+        try:
+            proc = subprocess.Popen(command, **popen_kwargs)
+        except OSError as exc:
+            print(f"[launcher] failed to start background launcher: {exc}", file=sys.stderr)
+            return 1
+
+    deadline = time.monotonic() + _BACKGROUND_READY_TIMEOUT_SEC
+    while time.monotonic() < deadline:
+        if session_path.exists():
+            try:
+                session = read_session(session_path)
+                state = str(session.get("state", "UNKNOWN"))
+                if state == "FAILED":
+                    print(
+                        f"[launcher] background launcher failed: {session.get('error', 'unknown error')} "
+                        f"(log={log_path})",
+                        file=sys.stderr,
+                    )
+                    return 1
+                response = send_control_command(session_path, "status", timeout_sec=1.0)
+                print(
+                    json.dumps(
+                        {
+                            "session_file": str(session_path),
+                            "pid": response.get("pid"),
+                            "state": response.get("state"),
+                            "log_file": str(log_path),
+                        }
+                    )
+                )
+                return 0
+            except LauncherControlError:
+                pass
+        rc = proc.poll()
+        if rc is not None:
+            print(
+                f"[launcher] background launcher exited before becoming ready: rc={rc} "
+                f"(log={log_path})",
+                file=sys.stderr,
+            )
+            return 1
+        time.sleep(0.1)
+
+    print(
+        f"[launcher] timed out waiting for background launcher readiness "
+        f"(log={log_path})",
+        file=sys.stderr,
+    )
+    _stop_background_process(proc)
+    return 1
+
+
+def _write_failed_session(
+    session_file: Path,
+    launch_file: Path,
+    log_file: Path,
+    error: str,
+) -> None:
+    write_session(
+        session_file,
+        {
+            "version": 1,
+            "pid": os.getpid(),
+            "launch_file": str(launch_file),
+            "log_file": str(log_file),
+            "state": "FAILED",
+            "error": error,
+        },
+    )
+
+
+def _run_background_worker(
+    service: LauncherService,
+    launch_file: str,
+    session_file: str,
+) -> int:
+    session_path = Path(session_file).expanduser().resolve()
+    launch_path = Path(launch_file).expanduser().resolve()
+    log_path = _background_log_path(session_path)
+    server: LauncherControlServer | None = None
+    try:
+        service.activate()
+        rc = service.cmd("start")
+        if rc != 0:
+            raise RuntimeError(f"hako-cmd start failed with rc={rc}")
+        server = LauncherControlServer(
+            service=service,
+            session_path=session_path,
+            launch_file=launch_path,
+            log_file=log_path,
+        )
+        server.serve_until_terminated()
+        return 0
+    except Exception as exc:
+        try:
+            service.terminate()
+        except Exception:
+            pass
+        _write_failed_session(session_path, launch_path, log_path, str(exc))
+        print(f"[launcher] background worker failed: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if server is not None:
+            server.server_close()
+
+
+# -------- CLI エントリ --------
 
 async def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Hakoniwa Launcher")
@@ -125,7 +318,18 @@ async def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--no-watch", action="store_true",
                         help="(immediate時) 監視せず起動だけして終了")
+    parser.add_argument(
+        "--background",
+        metavar="SESSION_FILE",
+        help="Launch in the background and write lifecycle control information to SESSION_FILE",
+    )
+    parser.add_argument("--_background-worker", metavar="SESSION_FILE", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    if args.background is not None:
+        if args.mode != "immediate" or args.no_watch:
+            parser.error("--background cannot be combined with --mode or --no-watch")
+        return _spawn_background(args.launch_file, args.background)
 
     # Setup logging
     if os.environ.get('HAKO_PDU_DEBUG') == '1':
@@ -142,6 +346,15 @@ async def main(argv: list[str] | None = None) -> int:
     try:
         service = LauncherService(launch_path=args.launch_file)
     except Exception as e:
+        if args._background_worker is not None:
+            session_path = Path(args._background_worker).expanduser().resolve()
+            launch_path = Path(args.launch_file).expanduser().resolve()
+            _write_failed_session(
+                session_path,
+                launch_path,
+                _background_log_path(session_path),
+                f"failed to load spec: {e}",
+            )
         print(f"[launcher] Failed to load spec: {e}", file=sys.stderr)
         return 1
 
@@ -150,6 +363,9 @@ async def main(argv: list[str] | None = None) -> int:
     print("[INFO] HakoLauncher ready. assets:")
     for a in service.spec.assets:
         print(f" - {a.name} (cwd={a.cwd}, cmd={a.command}, args={a.args})")
+
+    if args._background_worker is not None:
+        return _run_background_worker(service, args.launch_file, args._background_worker)
 
     if args.mode == "immediate":
         try:
@@ -212,5 +428,6 @@ async def main(argv: list[str] | None = None) -> int:
 
     return 0
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))
