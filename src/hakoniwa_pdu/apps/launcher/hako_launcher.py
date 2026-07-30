@@ -171,8 +171,12 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
                     return 2
                 except LauncherControlError:
                     print(f"[launcher] replacing stale session file: {session_path}", file=sys.stderr)
-        except LauncherControlError:
-            print(f"[launcher] replacing unreadable session file: {session_path}", file=sys.stderr)
+        except LauncherControlError as exc:
+            print(
+                f"[launcher] refusing to overwrite unreadable session file: {session_path}: {exc}",
+                file=sys.stderr,
+            )
+            return 2
         session_path.unlink(missing_ok=True)
 
     command = [
@@ -426,4 +430,4 @@ async def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    raise SystemExit(asyncio.run(main()))
