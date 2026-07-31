@@ -234,6 +234,8 @@ def write_resolved(ctx: Context, operation: str) -> Path:
 
 def build(ctx: Context) -> None:
     ctx.build_dir.mkdir(parents=True, exist_ok=True)
+    for stale_wheel in ctx.build_dir.glob("hakoniwa_pdu-*.whl"):
+        stale_wheel.unlink()
     _run(
         [
             sys.executable,
@@ -371,6 +373,7 @@ def write_receipt(ctx: Context, package: Mapping[str, str]) -> Path:
         f"  prefix: {_yaml_scalar(ctx.install_dir)}",
         "capabilities:",
         "  hako_launcher: true",
+        "  launcher_background_lifecycle: true",
         "  shm_backend: true",
         "  external_rpc: true",
         "  websocket: true",
@@ -457,6 +460,8 @@ def _smoke_import(ctx: Context) -> None:
             (
                 "import hakopy; "
                 "import hakoniwa_pdu.apps.launcher.hako_launcher; "
+                "import hakoniwa_pdu.apps.launcher.hako_launcher_control; "
+                "import hakoniwa_pdu.apps.launcher.hako_launcher_ctl; "
                 "import hakoniwa_pdu.impl.shm_communication_service"
             ),
         ],

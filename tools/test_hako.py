@@ -128,6 +128,25 @@ class ManifestTests(unittest.TestCase):
         self.assertNotIn("--no-build-isolation", command)
         self.assertEqual(command[:4], [sys.executable, "-m", "pip", "wheel"])
 
+    def test_build_removes_stale_distribution_wheels(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = HAKO.create_parser().parse_args(
+                ["build", "--build-dir", temp_dir]
+            )
+            ctx = HAKO.Context(
+                args,
+                self.config(),
+                HAKO.repo_root() / "hakoniwa-build.yaml",
+            )
+            stale = ctx.build_dir / "hakoniwa_pdu-1.6.3-py3-none-any.whl"
+            stale.parent.mkdir(parents=True, exist_ok=True)
+            stale.touch()
+
+            with patch.object(HAKO, "_run"):
+                HAKO.build(ctx)
+
+            self.assertFalse(stale.exists())
+
     def test_install_force_reinstalls_same_version_wheel_before_receipt(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             prefix = Path(temp_dir)
@@ -178,6 +197,46 @@ class ManifestTests(unittest.TestCase):
                 ],
                 commands,
             )
+
+    def test_receipt_declares_launcher_background_lifecycle(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = HAKO.create_parser().parse_args(
+                [
+                    "install",
+                    "--install-dir",
+                    temp_dir,
+                    "--core-root",
+                    temp_dir,
+                ]
+            )
+            ctx = HAKO.Context(
+                args,
+                self.config(),
+                HAKO.repo_root() / "hakoniwa-build.yaml",
+            )
+            dependency = {
+                "version": "1.0.0",
+                "source_revision": "core-revision",
+                "build_limits": {
+                    "asset_num": 16,
+                },
+            }
+            with patch.object(HAKO.shutil, "copyfile"), patch.object(
+                HAKO, "_read_core_receipt", return_value=dependency
+            ), patch.object(
+                HAKO, "_command_output", return_value="pdu-python-revision"
+            ):
+                receipt = HAKO.write_receipt(
+                    ctx,
+                    {
+                        "Name": "hakoniwa-pdu",
+                        "Version": "1.6.4",
+                        "Location": str(ctx.venv_dir),
+                    },
+                )
+
+            content = receipt.read_text(encoding="utf-8")
+            self.assertIn("launcher_background_lifecycle: true", content)
 
 
 if __name__ == "__main__":
