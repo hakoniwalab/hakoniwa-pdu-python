@@ -7,6 +7,7 @@ import secrets
 import socket
 import socketserver
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Protocol
@@ -15,6 +16,8 @@ SESSION_VERSION = 1
 DEFAULT_CONTROL_HOST = "127.0.0.1"
 _TERMINAL_STATES = {"TERMINATED", "FAILED"}
 _MAX_REQUEST_BYTES = 64 * 1024
+_SESSION_PERSIST_LOCK_TIMEOUT_SEC = 1.0
+_SESSION_LOCK_RETRY_INTERVAL_SEC = 0.01
 
 
 class LauncherLifecycle(Protocol):
@@ -110,9 +113,10 @@ def write_owned_session(
     payload: dict[str, Any],
     *,
     session_id: str,
+    lock_timeout_sec: float = 0.0,
 ) -> Path:
     """Atomically update a session only while this launcher still owns it."""
-    with session_file_lock(path):
+    with session_file_lock(path, timeout_sec=lock_timeout_sec):
         current = read_session(path)
         if current.get("session_id") != session_id:
             raise LauncherControlError("session ownership changed")
@@ -124,11 +128,20 @@ def new_session_id() -> str:
 
 
 @contextmanager
-def session_file_lock(path: str | os.PathLike[str]) -> Iterator[None]:
-    """Serialize session inspection and reservation across processes."""
+def session_file_lock(
+    path: str | os.PathLike[str],
+    *,
+    timeout_sec: float = 0.0,
+) -> Iterator[None]:
+    """Serialize session inspection and reservation across processes.
+
+    The default remains fail-fast for competing launch reservations. Existing
+    session owners may opt into a bounded wait while persisting state.
+    """
     session_path = _path(path)
     lock_path = session_path.with_name(f".{session_path.name}.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + max(0.0, timeout_sec)
     with lock_path.open("a+b") as lock_stream:
         try:
             os.chmod(lock_path, 0o600)
@@ -138,20 +151,34 @@ def session_file_lock(path: str | os.PathLike[str]) -> Iterator[None]:
         if lock_stream.tell() == 0:
             lock_stream.write(b"\0")
             lock_stream.flush()
-        lock_stream.seek(0)
-        try:
-            if os.name == "nt":
-                import msvcrt
 
-                msvcrt.locking(lock_stream.fileno(), msvcrt.LK_NBLCK, 1)
+        while True:
+            lock_stream.seek(0)
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(lock_stream.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(
+                        lock_stream.fileno(),
+                        fcntl.LOCK_EX | fcntl.LOCK_NB,
+                    )
+            except OSError as exc:
+                remaining = deadline - time.monotonic()
+                if (
+                    exc.errno not in (errno.EACCES, errno.EAGAIN)
+                    or remaining <= 0
+                ):
+                    raise LauncherControlError(
+                        f"another launcher is preparing session file: {session_path}"
+                    ) from exc
+                time.sleep(min(_SESSION_LOCK_RETRY_INTERVAL_SEC, remaining))
             else:
-                import fcntl
+                break
 
-                fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            raise LauncherControlError(
-                f"another launcher is preparing session file: {session_path}"
-            ) from exc
         try:
             yield
         finally:
@@ -201,6 +228,16 @@ def is_terminal_session(data: dict[str, Any]) -> bool:
     return str(data.get("state", "")).upper() in _TERMINAL_STATES
 
 
+def _read_session_for_claim(session_path: Path) -> dict[str, Any]:
+    try:
+        return read_session(session_path)
+    except LauncherControlError as exc:
+        raise LauncherSessionConflict(
+            f"refusing to overwrite unreadable session file "
+            f"{session_path}: {exc}"
+        ) from exc
+
+
 def claim_session(
     path: str | os.PathLike[str],
     payload: dict[str, Any],
@@ -210,43 +247,62 @@ def claim_session(
     """Validate any prior owner and atomically reserve a session for a new run."""
     session_path = _path(path)
     with session_file_lock(session_path):
-        if session_path.exists():
-            try:
-                existing = read_session(session_path)
-            except LauncherControlError as exc:
-                raise LauncherSessionConflict(
-                    f"refusing to overwrite unreadable session file "
-                    f"{session_path}: {exc}"
-                ) from exc
+        if not session_path.exists():
+            return reserve_session(session_path, payload)
 
-            if not is_terminal_session(existing):
-                try:
-                    response = send_control_command(
-                        session_path,
-                        "status",
-                        timeout_sec=status_timeout_sec,
-                    )
-                except LauncherControlError as exc:
-                    try:
-                        pid = int(existing["pid"])
-                    except (KeyError, TypeError, ValueError) as pid_exc:
-                        raise LauncherSessionConflict(
-                            f"refusing to replace an unreachable session without "
-                            f"a usable owner PID: {session_path}: {exc}"
-                        ) from pid_exc
-                    if is_process_alive(pid):
-                        raise LauncherSessionConflict(
-                            f"refusing to replace an unreachable session whose "
-                            f"recorded process may still be alive: {session_path}: {exc}"
-                        ) from exc
-                else:
-                    raise LauncherSessionConflict(
-                        f"background session is already active: "
-                        f"{session_path} (state={response.get('state')})"
-                    )
-
+        existing = _read_session_for_claim(session_path)
+        if is_terminal_session(existing):
             session_path.unlink(missing_ok=True)
+            return reserve_session(session_path, payload)
+        observed_session_id = existing.get("session_id")
 
+    # A live owner may need the same lock while servicing status or persisting a
+    # startup transition. Do not hold the reservation lock across network I/O.
+    try:
+        response = send_control_command(
+            session_path,
+            "status",
+            timeout_sec=status_timeout_sec,
+        )
+        probe_error: LauncherControlError | None = None
+    except LauncherControlError as exc:
+        response = None
+        probe_error = exc
+
+    with session_file_lock(session_path):
+        if not session_path.exists():
+            return reserve_session(session_path, payload)
+
+        current = _read_session_for_claim(session_path)
+        if current.get("session_id") != observed_session_id:
+            raise LauncherSessionConflict(
+                f"background session changed while validating: {session_path}"
+            )
+        if is_terminal_session(current):
+            session_path.unlink(missing_ok=True)
+            return reserve_session(session_path, payload)
+
+        if response is not None:
+            raise LauncherSessionConflict(
+                f"background session is already active: "
+                f"{session_path} (state={response.get('state')})"
+            )
+
+        assert probe_error is not None
+        try:
+            pid = int(current["pid"])
+        except (KeyError, TypeError, ValueError) as pid_exc:
+            raise LauncherSessionConflict(
+                f"refusing to replace an unreachable session without "
+                f"a usable owner PID: {session_path}: {probe_error}"
+            ) from pid_exc
+        if is_process_alive(pid):
+            raise LauncherSessionConflict(
+                f"refusing to replace an unreachable session whose "
+                f"recorded process may still be alive: {session_path}: {probe_error}"
+            ) from probe_error
+
+        session_path.unlink(missing_ok=True)
         return reserve_session(session_path, payload)
 
 
@@ -318,6 +374,7 @@ class LauncherControlServer(socketserver.TCPServer):
                 self.session_path,
                 self.session_payload(),
                 session_id=self.session_id,
+                lock_timeout_sec=_SESSION_PERSIST_LOCK_TIMEOUT_SEC,
             )
             self._last_persisted_state = state
 
