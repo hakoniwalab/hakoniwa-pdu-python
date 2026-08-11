@@ -8,6 +8,7 @@ import platform
 import shutil
 import subprocess
 import sys
+from importlib.machinery import EXTENSION_SUFFIXES
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
@@ -168,14 +169,73 @@ def _run(command: list[str], cwd: Path) -> None:
 def _hakopy_path(ctx: Context) -> Path | None:
     if ctx.core_root is None:
         return None
-    suffix = ".pyd" if ctx.os_name == "windows" else ".so"
-    return (
-        ctx.core_root
-        / "share"
-        / "hakoniwa"
-        / "python"
-        / f"hakopy{suffix}"
+    receipt = _read_core_receipt(ctx)
+    python_contract = receipt.get("python", {})
+    artifact = python_contract.get("artifact")
+    if not isinstance(artifact, str) or not artifact:
+        core_python = ctx.core_root / "share" / "hakoniwa" / "python"
+        extension = ".pyd" if ctx.os_name == "windows" else ".so"
+        candidates = sorted(
+            {
+                (core_python / f"hakopy{suffix}").resolve()
+                for suffix in EXTENSION_SUFFIXES
+                if suffix.endswith(extension)
+                and (core_python / f"hakopy{suffix}").is_file()
+            },
+            key=lambda path: path.name,
+        )
+        if len(candidates) != 1:
+            rendered = ", ".join(path.name for path in candidates) or "none"
+            raise HakoError(
+                "Core Component Receipt is missing python.artifact and the "
+                "compatible legacy hakopy artifact is not unique: "
+                f"{rendered}"
+            )
+        print(
+            "WARNING: Core Component Receipt is missing python.artifact; "
+            f"using the single interpreter-recognized legacy artifact: {candidates[0]}",
+            file=sys.stderr,
+        )
+        return candidates[0]
+
+    relative = Path(artifact)
+    if relative.is_absolute():
+        raise HakoError(
+            f"Core Component Receipt python.artifact must be relative: {artifact}"
+        )
+    core_root = ctx.core_root.resolve()
+    resolved = (core_root / relative).resolve()
+    try:
+        resolved.relative_to(core_root)
+    except ValueError as exc:
+        raise HakoError(
+            "Core Component Receipt python.artifact escapes the Core prefix: "
+            f"{artifact}"
+        ) from exc
+
+    extension = ".pyd" if ctx.os_name == "windows" else ".so"
+    untagged_name = f"hakopy{extension}"
+    tagged_name = resolved.name.startswith("hakopy.") and resolved.name.endswith(
+        extension
     )
+    if resolved.name != untagged_name and not tagged_name:
+        raise HakoError(
+            "Core Component Receipt python.artifact is not a hakopy extension "
+            f"for {ctx.os_name}: {artifact}"
+        )
+    return resolved
+
+
+def _require_hakopy(ctx: Context) -> Path:
+    hakopy = _hakopy_path(ctx)
+    if hakopy is None:
+        raise HakoError(
+            "Foundation Core hakopy is required; set paths.hakoniwa_core_root "
+            "or --core-root"
+        )
+    if not hakopy.is_file():
+        raise HakoError(f"Core Receipt-declared hakopy artifact not found: {hakopy}")
+    return hakopy
 
 
 def doctor(ctx: Context) -> list[str]:
@@ -190,12 +250,10 @@ def doctor(ctx: Context) -> list[str]:
         )
         if result.returncode:
             errors.append(f"Python build prerequisite is missing: {module}")
-    hakopy = _hakopy_path(ctx)
-    if hakopy is None or not hakopy.is_file():
-        errors.append(
-            "Foundation Core hakopy is required; set paths.hakoniwa_core_root "
-            "or --core-root"
-        )
+    try:
+        _require_hakopy(ctx)
+    except HakoError as exc:
+        errors.append(str(exc))
     return errors
 
 
@@ -314,7 +372,7 @@ def _read_core_receipt(ctx: Context) -> Dict[str, Any]:
     )
     if not path.is_file():
         raise HakoError(f"Core Component Receipt not found: {path}")
-    result: Dict[str, Any] = {"build_limits": {}}
+    result: Dict[str, Any] = {"build_limits": {}, "python": {}}
     section = ""
     for raw in path.read_text(encoding="utf-8").splitlines():
         if raw and not raw.startswith(" ") and raw.endswith(":"):
@@ -328,6 +386,18 @@ def _read_core_receipt(ctx: Context) -> Dict[str, Any]:
             result[key] = parsed
         elif section == "build_limits":
             result["build_limits"][key] = parsed
+        elif section == "python" and key in {
+            "binding_mode",
+            "implementation",
+            "executable",
+            "version",
+            "major",
+            "minor",
+            "soabi",
+            "extension_suffix",
+            "artifact",
+        }:
+            result["python"][key] = parsed
     return result
 
 
@@ -435,9 +505,8 @@ def install(ctx: Context) -> None:
         ],
         ctx.root,
     )
-    if ctx.core_root is None:
-        raise HakoError("Foundation Core root is not resolved")
-    core_python = ctx.core_root / "share" / "hakoniwa" / "python"
+    hakopy = _require_hakopy(ctx)
+    core_python = hakopy.parent
     (_site_packages(ctx) / "hakoniwa_foundation_core.pth").write_text(
         str(core_python) + "\n",
         encoding="utf-8",

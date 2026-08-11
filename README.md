@@ -28,6 +28,26 @@ pip install hakoniwa-pdu
 pip show hakoniwa-pdu   # check version
 ```
 
+### Foundation Core Python binding contract
+
+When this package is installed through `tools/hako.py`, the Core Python
+binding is resolved from the installed Core Component Receipt:
+
+```text
+<core-prefix>/share/hakoniwa/receipts/hakoniwa-core-pro.yaml
+  -> python.artifact
+```
+
+The declared artifact may use the platform's ABI-tagged extension name, such
+as `hakopy.cp312-win_amd64.pyd` on Windows. `doctor` and `install` use this
+same Receipt declaration and reject a missing artifact, an incompatible
+extension, or a path outside the Core install prefix. They do not create or
+rename an undeclared `hakopy.pyd`/`hakopy.so` compatibility copy. For a legacy
+Core Receipt that predates `python.artifact`, only one extension recognized by
+the running Python interpreter may be selected; no candidate or multiple
+candidates are rejected. The final `import hakopy` smoke check runs with the
+Foundation virtual environment.
+
 ### Environment Variables
 
 Specify the directory containing `.offset` files for PDU conversion:
