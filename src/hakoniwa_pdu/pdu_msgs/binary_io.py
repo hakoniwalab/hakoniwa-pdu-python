@@ -4,6 +4,7 @@
 import glob
 import re
 import os
+from enum import IntEnum
 from sys import byteorder
 import struct
 
@@ -236,6 +237,26 @@ def writeBinary(binary_data, off, bin):
 
 def readBinary(binary_data, off, size):
     return binary_data[off:off+size]
+
+class PduMetaDataState(IntEnum):
+    INVALID = 0
+    UNINITIALIZED = 1
+    VALID = 2
+
+
+def classify_pdu_metadata(binary_data):
+    """Classify a PDU's 24-byte metadata header without decoding its body."""
+    if binary_data is None or len(binary_data) < 24:
+        return PduMetaDataState.INVALID
+    header = bytes(binary_data[:24])
+    if header == b"\x00" * 24:
+        return PduMetaDataState.UNINITIALIZED
+    magicno = int.from_bytes(header[0:4], byteorder="little", signed=False)
+    version = int.from_bytes(header[4:8], byteorder="little", signed=False)
+    if magicno == 0x12345678 and version == 1:
+        return PduMetaDataState.VALID
+    return PduMetaDataState.INVALID
+
 
 class PduMetaData:
     PDU_META_DATA_SIZE = 24
