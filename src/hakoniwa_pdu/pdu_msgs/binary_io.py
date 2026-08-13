@@ -9,37 +9,37 @@ from sys import byteorder
 import struct
 
 def binToint8(binary):
-    return struct.unpack('b', binary)[0]
+    return struct.unpack('<b', binary)[0]
 
 def binToint16(binary):
-    return struct.unpack('h', binary)[0]
+    return struct.unpack('<h', binary)[0]
 
 def binToint32(binary):
-    return struct.unpack('i', binary)[0]
+    return struct.unpack('<i', binary)[0]
 
 def binTobool(binary):
-    return struct.unpack('i', binary)[0] != 0
+    return struct.unpack('<i', binary)[0] != 0
 
 def binToint64(binary):
-    return struct.unpack('q', binary)[0]
+    return struct.unpack('<q', binary)[0]
 
 def binTouint8(binary):
-    return struct.unpack('B', binary)[0]
+    return struct.unpack('<B', binary)[0]
 
 def binTouint16(binary):
-    return struct.unpack('H', binary)[0]
+    return struct.unpack('<H', binary)[0]
 
 def binTouint32(binary):
-    return struct.unpack('I', binary)[0]
+    return struct.unpack('<I', binary)[0]
 
 def binTouint64(binary):
-    return struct.unpack('Q', binary)[0]
+    return struct.unpack('<Q', binary)[0]
 
 def binTofloat32(binary):
-    return struct.unpack('f', binary)[0]
+    return struct.unpack('<f', binary)[0]
 
 def binTofloat64(binary):
-    return struct.unpack('d', binary)[0]
+    return struct.unpack('<d', binary)[0]
 
 def binTostring(binary, max_len=128):
     try:
@@ -58,42 +58,44 @@ def binTostring(binary, max_len=128):
 
 
 def int8Tobin(arg):
-    return struct.pack('b', arg)
+    return struct.pack('<b', arg)
 
 def int16Tobin(arg):
-    return struct.pack('h', arg)
+    return struct.pack('<h', arg)
 
 def int32Tobin(arg):
-    return struct.pack('i', arg)
+    return struct.pack('<i', arg)
 
 def boolTobin(arg):
-    return struct.pack('i', 1 if arg else 0)
+    return struct.pack('<i', 1 if arg else 0)
 
 def int64Tobin(arg):
-    return struct.pack('q', arg)
+    return struct.pack('<q', arg)
 
 def uint8Tobin(arg):
-    return struct.pack('B', arg)
+    return struct.pack('<B', arg)
 
 def uint16Tobin(arg):
-    return struct.pack('H', arg)
+    return struct.pack('<H', arg)
 
 def uint32Tobin(arg):
-    return struct.pack('I', arg)
+    return struct.pack('<I', arg)
 
 def uint64Tobin(arg):
-    return struct.pack('Q', arg)
+    return struct.pack('<Q', arg)
 
 def float32Tobin(arg):
-    return struct.pack('f', arg)
+    return struct.pack('<f', arg)
 
 def float64Tobin(arg):
-    return struct.pack('d', arg)
+    return struct.pack('<d', arg)
 
 def stringTobin(arg):
     return arg.encode(encoding='utf-8') + b'\x00'
 
 def typeTobin(type, arg):
+    if type in ("byte", "char"):
+        type = "uint8"
     if (type == "int8"):
         return int8Tobin(arg)
     elif (type == "uint8"):
@@ -122,6 +124,8 @@ def typeTobin(type, arg):
         return None
 
 def binTovalue(type, arg):
+    if type in ("byte", "char"):
+        type = "uint8"
     if (type == "int8"):
         return binToint8(arg)
     elif (type == "uint8"):
@@ -150,6 +154,8 @@ def binTovalue(type, arg):
         return None
 def binToArrayValues(type, arg, array_len=None, elm_size=None):
     # little endian
+    if type in ("byte", "char"):
+        type = "uint8"
     if array_len is not None:
         array_len = int(array_len)
     if elm_size is not None:
@@ -189,6 +195,8 @@ def binToArrayValues(type, arg, array_len=None, elm_size=None):
         return None
 
 def typeTobin_array(type, values, elm_size=None):
+    if type in ("byte", "char"):
+        type = "uint8"
     count = len(values)
     if type == "int8":
         return struct.pack(f'<{count}b', *values)
