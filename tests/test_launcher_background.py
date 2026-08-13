@@ -271,6 +271,37 @@ def test_background_startup_failure_returns_nonzero_and_records_failure(
     assert "rc=7" in session["error"]
 
 
+def test_background_session_id_starting_with_dash_is_passed_as_option_value(
+    tmp_path,
+    monkeypatch,
+):
+    captured_command = None
+
+    class ExitedProcess:
+        pid = 4321
+
+        def poll(self):
+            return 7
+
+    def fake_popen(command, **kwargs):
+        nonlocal captured_command
+        captured_command = command
+        return ExitedProcess()
+
+    monkeypatch.setattr(hako_launcher, "new_session_id", lambda: "-leading-dash")
+    monkeypatch.setattr(hako_launcher.subprocess, "Popen", fake_popen)
+
+    rc = hako_launcher._spawn_background(
+        str(tmp_path / "launch.json"),
+        str(tmp_path / "session.json"),
+    )
+
+    assert rc == 1
+    assert captured_command is not None
+    assert "--_session-id=-leading-dash" in captured_command
+    assert "--_session-id" not in captured_command
+
+
 def test_partial_activation_failure_cleans_up_started_assets():
     class PartialMonitor:
         def __init__(self):

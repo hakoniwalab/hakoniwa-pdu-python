@@ -236,8 +236,7 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
         str(launch_path),
         "--_background-worker",
         str(session_path),
-        "--_session-id",
-        session_id,
+        f"--_session-id={session_id}",
     ]
     popen_kwargs = {
         "stdin": subprocess.DEVNULL,
