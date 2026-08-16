@@ -18,9 +18,11 @@ _TERMINAL_STATES = {"TERMINATED", "FAILED"}
 _MAX_REQUEST_BYTES = 64 * 1024
 _SESSION_PERSIST_LOCK_TIMEOUT_SEC = 1.0
 _SESSION_LOCK_RETRY_INTERVAL_SEC = 0.01
+CONTROL_COMMANDS = ("status", "start", "terminate")
 
 
 class LauncherLifecycle(Protocol):
+    def cmd(self, command: str) -> int: ...
     def terminate(self) -> None: ...
     def status(self) -> str: ...
 
@@ -393,6 +395,24 @@ class LauncherControlServer(socketserver.TCPServer):
         if command == "status":
             self.persist()
             return {"ok": True, "pid": os.getpid(), "state": self.service.status()}
+        if command == "start":
+            state = self.service.status()
+            if state != "ACTIVATED":
+                return {
+                    "ok": False,
+                    "pid": os.getpid(),
+                    "state": state,
+                    "error": f"start requires ACTIVATED state, got {state}",
+                }
+            rc = self.service.cmd("start")
+            self.persist(force=True)
+            return {
+                "ok": rc == 0,
+                "pid": os.getpid(),
+                "state": self.service.status(),
+                "returncode": rc,
+                **({} if rc == 0 else {"error": f"hako-cmd start failed with rc={rc}"}),
+            }
         if command == "terminate":
             self.service.terminate()
             self.stop_requested = True

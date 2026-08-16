@@ -27,6 +27,7 @@ from .hako_launcher_control import (
 
 _BACKGROUND_READY_TIMEOUT_SEC = 60.0
 _BACKGROUND_SHUTDOWN_TIMEOUT_SEC = 30.0
+BACKGROUND_MODES = ("immediate", "activate-only")
 
 
 class LauncherService:
@@ -215,7 +216,12 @@ def _reserve_background_session(
     return session_id, 0
 
 
-def _spawn_background(launch_file: str, session_file: str) -> int:
+def _spawn_background(
+    launch_file: str,
+    session_file: str,
+    *,
+    mode: str = "immediate",
+) -> int:
     launch_path = Path(launch_file).expanduser().resolve()
     session_path = Path(session_file).expanduser().resolve()
     log_path = _background_log_path(session_path)
@@ -237,6 +243,7 @@ def _spawn_background(launch_file: str, session_file: str) -> int:
         "--_background-worker",
         str(session_path),
         f"--_session-id={session_id}",
+        f"--_background-mode={mode}",
     ]
     popen_kwargs = {
         "stdin": subprocess.DEVNULL,
@@ -374,6 +381,7 @@ def _run_background_worker(
     launch_file: str,
     session_file: str,
     session_id: str,
+    mode: str,
 ) -> int:
     session_path = Path(session_file).expanduser().resolve()
     launch_path = Path(launch_file).expanduser().resolve()
@@ -381,9 +389,10 @@ def _run_background_worker(
     server: LauncherControlServer | None = None
     try:
         service.activate()
-        rc = service.cmd("start")
-        if rc != 0:
-            raise RuntimeError(f"hako-cmd start failed with rc={rc}")
+        if mode == "immediate":
+            rc = service.cmd("start")
+            if rc != 0:
+                raise RuntimeError(f"hako-cmd start failed with rc={rc}")
         server = LauncherControlServer(
             service=service,
             session_path=session_path,
@@ -432,12 +441,18 @@ async def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--_background-worker", metavar="SESSION_FILE", help=argparse.SUPPRESS)
     parser.add_argument("--_session-id", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--_background-mode",
+        choices=BACKGROUND_MODES,
+        default="immediate",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args(argv)
 
     if args.background is not None:
-        if args.mode != "immediate" or args.no_watch:
-            parser.error("--background cannot be combined with --mode or --no-watch")
-        return _spawn_background(args.launch_file, args.background)
+        if args.mode == "serve" or args.no_watch:
+            parser.error("--background supports immediate or activate-only mode")
+        return _spawn_background(args.launch_file, args.background, mode=args.mode)
     if args._background_worker is not None and args._session_id is None:
         parser.error("--_session-id is required for a background worker")
 
@@ -481,6 +496,7 @@ async def main(argv: list[str] | None = None) -> int:
             args.launch_file,
             args._background_worker,
             args._session_id,
+            args._background_mode,
         )
 
     if args.mode == "immediate":

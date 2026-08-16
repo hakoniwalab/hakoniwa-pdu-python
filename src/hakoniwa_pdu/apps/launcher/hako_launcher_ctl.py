@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .hako_launcher_control import (
+    CONTROL_COMMANDS,
     LauncherControlError,
     is_terminal_session,
     read_session,
@@ -19,7 +20,7 @@ def _print(payload: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Hakoniwa Launcher background control")
-    parser.add_argument("command", choices=["status", "terminate"])
+    parser.add_argument("command", choices=CONTROL_COMMANDS)
     parser.add_argument("session_file", type=Path)
     args = parser.parse_args(argv)
 

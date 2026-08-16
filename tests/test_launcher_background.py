@@ -17,8 +17,14 @@ from hakoniwa_pdu.apps.launcher.hako_launcher_control import (
 
 class FakeService:
     def __init__(self) -> None:
-        self.state = "RUNNING"
+        self.state = "ACTIVATED"
+        self.cmd_calls = []
         self.terminate_calls = 0
+
+    def cmd(self, command: str) -> int:
+        self.cmd_calls.append(command)
+        self.state = "RUNNING"
+        return 0
 
     def status(self) -> str:
         return self.state
@@ -59,7 +65,16 @@ def test_background_control_status_and_terminate(tmp_path):
     try:
         status = send_control_command(session_file, "status")
         assert status["ok"] is True
-        assert status["state"] == "RUNNING"
+        assert status["state"] == "ACTIVATED"
+
+        started = send_control_command(session_file, "start")
+        assert started["ok"] is True
+        assert started["state"] == "RUNNING"
+        assert service.cmd_calls == ["start"]
+
+        with pytest.raises(LauncherControlError, match="requires ACTIVATED"):
+            send_control_command(session_file, "start")
+        assert service.cmd_calls == ["start"]
 
         terminated = send_control_command(session_file, "terminate")
         assert terminated["ok"] is True
@@ -92,7 +107,7 @@ def test_mismatched_session_token_cannot_terminate(tmp_path):
         with pytest.raises(LauncherControlError, match="unauthorized"):
             send_control_command(fake_session, "terminate")
         assert service.terminate_calls == 0
-        assert service.state == "RUNNING"
+        assert service.state == "ACTIVATED"
         send_control_command(real_session, "terminate")
         thread.join(timeout=2)
     finally:
@@ -300,6 +315,77 @@ def test_background_session_id_starting_with_dash_is_passed_as_option_value(
     assert captured_command is not None
     assert "--_session-id=-leading-dash" in captured_command
     assert "--_session-id" not in captured_command
+
+
+def test_activate_only_background_mode_is_forwarded_to_worker(
+    tmp_path,
+    monkeypatch,
+):
+    captured_command = None
+
+    class ExitedProcess:
+        pid = 4321
+
+        def poll(self):
+            return 7
+
+    def fake_popen(command, **kwargs):
+        nonlocal captured_command
+        captured_command = command
+        return ExitedProcess()
+
+    monkeypatch.setattr(hako_launcher.subprocess, "Popen", fake_popen)
+
+    rc = hako_launcher._spawn_background(
+        str(tmp_path / "launch.json"),
+        str(tmp_path / "session.json"),
+        mode="activate-only",
+    )
+
+    assert rc == 1
+    assert captured_command is not None
+    assert "--_background-mode=activate-only" in captured_command
+
+
+def test_activate_only_background_worker_does_not_start_simulation(
+    tmp_path,
+    monkeypatch,
+):
+    class WorkerService(FakeService):
+        def __init__(self):
+            super().__init__()
+            self.state = "IDLE"
+            self.activate_calls = 0
+
+        def activate(self):
+            self.activate_calls += 1
+            self.state = "ACTIVATED"
+
+    class FakeControlServer:
+        def __init__(self, **kwargs):
+            self.service = kwargs["service"]
+
+        def serve_until_terminated(self):
+            return None
+
+        def server_close(self):
+            return None
+
+    monkeypatch.setattr(hako_launcher, "LauncherControlServer", FakeControlServer)
+    service = WorkerService()
+
+    rc = hako_launcher._run_background_worker(
+        service,
+        str(tmp_path / "launch.json"),
+        str(tmp_path / "session.json"),
+        "session-id",
+        "activate-only",
+    )
+
+    assert rc == 0
+    assert service.activate_calls == 1
+    assert service.cmd_calls == []
+    assert service.state == "ACTIVATED"
 
 
 def test_partial_activation_failure_cleans_up_started_assets():
