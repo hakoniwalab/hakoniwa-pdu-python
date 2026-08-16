@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from pathlib import Path
 import subprocess
@@ -42,6 +43,9 @@ class HakoMonitor:
         self.defaults_env_ops = defaults_env_ops
         self.procs: List[Running] = []
         self._aborted = False
+        self._cleanup_condition = threading.Condition()
+        self._cleanup_in_progress = False
+        self._cleanup_complete = False
 
     # ---------- public API ----------
     def start_assets(self, timing: Literal["before_start", "after_start"]) -> None:
@@ -101,20 +105,48 @@ class HakoMonitor:
 
     def abort(self, reason: str = "abort") -> None:
         """
-        逆順で優雅停止（TERM→猶予→KILL）。二重呼び出しは無視。
-        """
-        if self._aborted:
-            return
-        self._aborted = True
+        逆順で優雅停止（TERM→猶予→KILL）。
 
-        # 逆順で止める
-        for rp in reversed(self.procs):
-            # 猶予は各アセットの start_grace_sec を流用（統一猶予でもOK）
-            rp.runner.terminate(grace_sec=rp.asset.start_grace_sec)
-        # 念のため最後に KILL 保険（生き残りがいれば）
-        for rp in reversed(self.procs):
-            if rp.runner.is_alive():
-                rp.runner.kill()
+        複数threadから呼ばれた場合は先行cleanupの完了を待つ。完了後も
+        processが残っていれば再試行するため、繰り返し呼び出し可能。
+        """
+        with self._cleanup_condition:
+            self._aborted = True
+            while self._cleanup_in_progress:
+                self._cleanup_condition.wait()
+            if self._cleanup_complete and self.all_terminated():
+                return
+            self._cleanup_in_progress = True
+
+        cleanup_errors: List[str] = []
+        survivors: List[str] = []
+        try:
+            for rp in reversed(self.procs):
+                try:
+                    rp.runner.terminate(grace_sec=rp.asset.start_grace_sec)
+                except Exception as exc:
+                    cleanup_errors.append(f"{rp.asset.name}: terminate failed: {exc}")
+            for rp in reversed(self.procs):
+                if not rp.runner.is_alive():
+                    continue
+                try:
+                    rp.runner.kill()
+                except Exception as exc:
+                    cleanup_errors.append(f"{rp.asset.name}: kill failed: {exc}")
+
+            survivors = [rp.asset.name for rp in self.procs if rp.runner.is_alive()]
+        finally:
+            with self._cleanup_condition:
+                self._cleanup_complete = not survivors
+                self._cleanup_in_progress = False
+                self._cleanup_condition.notify_all()
+
+        if survivors:
+            details = cleanup_errors + [f"assets still alive: {', '.join(survivors)}"]
+            raise RuntimeError("; ".join(details))
+
+    def all_terminated(self) -> bool:
+        return not any(rp.runner.is_alive() for rp in self.procs)
 
     # ---------- internals ----------
     def _wait_alive(self, runner: AssetRunner, grace: float) -> bool:

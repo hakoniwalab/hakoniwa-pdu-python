@@ -95,17 +95,22 @@ class LauncherService:
         return rc
 
     def terminate(self) -> None:
-        if self.state == "TERMINATED":
-            print(f"[launcher] terminate: already {self.state}")
-            return
         if self.state == "IDLE" and not self.monitor.procs:
             print("[launcher] terminate: already IDLE")
             return
-        print("[INFO] terminating all assets...")
+        if self.state == "TERMINATED":
+            print("[launcher] terminate: verifying terminated assets...")
+        else:
+            print("[INFO] terminating all assets...")
+        self.state = "TERMINATING"
+        self._stop_watch.set()
         try:
             self.monitor.abort("terminate")
-        finally:
-            self._stop_watch.set()
+        except Exception:
+            self.state = "FAILED"
+            print("[ERROR] asset cleanup failed; state -> FAILED", file=sys.stderr)
+            raise
+        else:
             self.state = "TERMINATED"
             print("[INFO] state -> TERMINATED")
 
@@ -119,16 +124,15 @@ class LauncherService:
                 for rp in list(self.monitor.procs):
                     if not rp.runner.is_alive():
                         print(f"[WARN] asset exited: {rp.asset.name} -> abort all")
-                        self.monitor.abort("asset_exit")
-                        self.state = "TERMINATED"
-                        self._stop_watch.set()
+                        self.terminate()
                         return
                 time.sleep(0.2)
         except Exception as e:
             print(f"[watch] exception: {e}", file=sys.stderr)
-            self.monitor.abort("watch_exception")
-            self.state = "TERMINATED"
-            self._stop_watch.set()
+            try:
+                self.terminate()
+            except Exception as cleanup_error:
+                print(f"[watch] cleanup exception: {cleanup_error}", file=sys.stderr)
 
 
 # -------- background lifecycle --------

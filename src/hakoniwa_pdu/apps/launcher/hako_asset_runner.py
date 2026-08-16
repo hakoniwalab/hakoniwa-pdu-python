@@ -1,6 +1,7 @@
 # launcher/hako_launch/hako_asset_runner.py
 from __future__ import annotations
 
+import errno
 import os, sys, time, signal, subprocess, json
 from dataclasses import dataclass
 from typing import Mapping, Optional, Iterable, Union
@@ -93,6 +94,7 @@ class AssetRunner:
         self.env = dict(os.environ) | dict(env or {})
         self.handle: Optional[ProcHandle] = None
         self._win_pid: Optional[int] = None
+        self._posix_pgid: Optional[int] = None
 
     # ---------- helpers ----------
     @staticmethod
@@ -204,6 +206,11 @@ class AssetRunner:
             popen_kw["preexec_fn"] = os.setsid
 
         popen = subprocess.Popen([command, *list(args)], **popen_kw)
+        if IS_POSIX:
+            # setsid() makes the child PID the process-group ID.  Keep that ID
+            # even after the direct child exits: launch scripts may leave a
+            # long-running descendant in the same group.
+            self._posix_pgid = popen.pid
 
         self.handle = ProcHandle(
             popen=popen,
@@ -220,7 +227,17 @@ class AssetRunner:
     def is_alive(self) -> bool:
         if self._win_pid is not None:
             return _win_pid_exists(self._win_pid)
-        return bool(self.handle) and self.handle.popen.poll() is None
+        if not self.handle:
+            return False
+        if IS_POSIX and self._posix_pgid is not None:
+            # poll() reaps an exited group leader.  The group can still contain
+            # descendants, so its existence is the lifecycle source of truth.
+            self.handle.popen.poll()
+            if self._posix_process_group_exists(self._posix_pgid):
+                return True
+            self._posix_pgid = None
+            return False
+        return self.handle.popen.poll() is None
 
     def wait(self, *, timeout: Optional[float] = None) -> Optional[int]:
         if self._win_pid is not None:
@@ -270,7 +287,7 @@ class AssetRunner:
             return
         try:
             if IS_POSIX:
-                os.killpg(h.popen.pid, signal.SIGTERM)  # type: ignore[arg-type]
+                os.killpg(self._posix_pgid or h.popen.pid, signal.SIGTERM)
             elif IS_WIN:
                 h.popen.send_signal(getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM))  # type: ignore[attr-defined]
             else:
@@ -285,11 +302,11 @@ class AssetRunner:
         else:
             self._cleanup_files()
 
-        self._wait_for_exit(timeout=grace_sec)
         if self.is_alive():
-            self.kill()
-        else:
-            self._cleanup_files()
+            raise RuntimeError(
+                f"process group did not terminate: pid={h.popen.pid} "
+                f"pgid={self._posix_pgid}"
+            )
 
     def kill(self) -> None:
         # Windows 側 PID を掴んでいる場合は強制終了
@@ -309,12 +326,17 @@ class AssetRunner:
             return
         try:
             if IS_POSIX:
-                os.killpg(h.popen.pid, signal.SIGKILL)  # type: ignore[arg-type]
+                os.killpg(self._posix_pgid or h.popen.pid, signal.SIGKILL)
             else:
                 h.popen.kill()
         finally:
             self._wait_for_exit(timeout=2.0)
             self._cleanup_files()
+        if self.is_alive():
+            raise RuntimeError(
+                f"process group survived SIGKILL: pid={h.popen.pid} "
+                f"pgid={self._posix_pgid}"
+            )
 
     def exit_info(self) -> ExitInfo:
         h = self.handle
@@ -334,13 +356,14 @@ class AssetRunner:
             return ExitInfo(exited=True, exit_code=None, signal=None, started_at=0.0, exited_at=time.time(), pid=None)
 
         rc = h.popen.poll()
+        alive = self.is_alive()
         info = ExitInfo(
-            exited=(rc is not None),
+            exited=(not alive),
             started_at=h.started_at,
-            exited_at=time.time() if rc is not None else None,
+            exited_at=time.time() if not alive else None,
             pid=h.popen.pid,
         )
-        if rc is None:
+        if alive or rc is None:
             return info
         if IS_POSIX and rc < 0:
             info.signal = -rc
@@ -349,6 +372,23 @@ class AssetRunner:
         return info
 
     # ---------- internals ----------
+    @staticmethod
+    def _posix_process_group_exists(pgid: int) -> bool:
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # The group exists even if the current user cannot signal it.
+            return True
+        except OSError as exc:
+            if exc.errno == errno.ESRCH:
+                return False
+            if exc.errno == errno.EPERM:
+                return True
+            raise
+
     def _wait_for_exit(self, *, timeout: float) -> None:
         end = time.time() + timeout
         while time.time() < end:
