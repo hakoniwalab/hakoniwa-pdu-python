@@ -39,8 +39,12 @@ class LauncherService:
         if self.launcher_spec.defaults and self.launcher_spec.defaults.env:
             self.defaults_env_ops = self.launcher_spec.defaults.env.model_dump(exclude_none=True)
 
-        self.monitor = HakoMonitor(self.spec, defaults_env_ops=self.defaults_env_ops)
         self.cli     = HakoCli(spec=self.spec, defaults_env_ops=self.defaults_env_ops)
+        self.monitor = HakoMonitor(
+            self.spec,
+            defaults_env_ops=self.defaults_env_ops,
+            asset_list_provider=self.cli,
+        )
 
         self.state: str = "IDLE"
         self._watch_thread: Optional[threading.Thread] = None
@@ -53,7 +57,11 @@ class LauncherService:
             return
         # activate()は冪等ではない。再実行の場合はモニターを再生成する
         if self.state == "TERMINATED":
-            self.monitor = HakoMonitor(self.spec, defaults_env_ops=self.defaults_env_ops)
+            self.monitor = HakoMonitor(
+                self.spec,
+                defaults_env_ops=self.defaults_env_ops,
+                asset_list_provider=self.cli,
+            )
 
         print("[INFO] activating 'before_start' assets...")
         self.state = "ACTIVATING"

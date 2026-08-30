@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 import subprocess
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional, Literal, Protocol
 
 from .effective_model import EffectiveSpec, EffectiveAsset
 from .envmerge import merge_env
@@ -17,6 +17,10 @@ from .hako_asset_runner import AssetRunner
 class Running:
     asset: EffectiveAsset
     runner: AssetRunner
+
+
+class AssetListProvider(Protocol):
+    def list_assets(self, *, timeout: Optional[float] = None) -> tuple[int, set[str]]: ...
 
 
 def _expand_path(p: Path | str | None, *, asset: str, base_dir: Path) -> str | None:
@@ -36,11 +40,18 @@ class HakoMonitor:
     - だれか落ちた時点で全体を停止し、notify を発火
     """
 
-    def __init__(self, spec: EffectiveSpec, *, defaults_env_ops: Optional[dict] = None) -> None:
+    def __init__(
+        self,
+        spec: EffectiveSpec,
+        *,
+        defaults_env_ops: Optional[dict] = None,
+        asset_list_provider: Optional[AssetListProvider] = None,
+    ) -> None:
         self.spec = spec
         # loader の設計上、EffectiveAsset.env には「asset個別 or defaults のどちらか」が入っている。
         # defaults と個別を合成したい場合は defaults_env_ops を渡す。
         self.defaults_env_ops = defaults_env_ops
+        self.asset_list_provider = asset_list_provider
         self.procs: List[Running] = []
         self._aborted = False
         self._cleanup_condition = threading.Condition()
@@ -85,6 +96,16 @@ class HakoMonitor:
                 self._notify("asset_start_failed", a.name)
                 self.abort("start_failed")
                 return
+
+            if a.readiness is not None:
+                if not self._wait_readiness(a):
+                    self._notify("asset_readiness_failed", a.name)
+                    self.abort("readiness_failed")
+                    expected = a.readiness.get("asset_name", "<unknown>")
+                    raise RuntimeError(
+                        f"asset readiness timed out: launcher={a.name}, "
+                        f"hako_asset={expected}"
+                    )
 
             # 次の起動までの待機
             print(f'[INFO] waiting for {a.name} to delay for {a.delay_sec} seconds before next asset...')
@@ -161,6 +182,41 @@ class HakoMonitor:
             time.sleep(0.1)
         print(f"[INFO] asset stabilized")
         return True
+
+    def _wait_readiness(self, asset: EffectiveAsset) -> bool:
+        readiness = asset.readiness or {}
+        if readiness.get("type") != "hako_asset":
+            raise RuntimeError(
+                f"unsupported readiness type for {asset.name}: "
+                f"{readiness.get('type')!r}"
+            )
+        if self.asset_list_provider is None:
+            raise RuntimeError(
+                f"hako_asset readiness requires an asset list provider: {asset.name}"
+            )
+
+        expected = str(readiness["asset_name"])
+        timeout_sec = float(readiness["timeout_sec"])
+        poll_interval_sec = float(readiness["poll_interval_sec"])
+        command_timeout_sec = float(readiness["command_timeout_sec"])
+        deadline = time.monotonic() + timeout_sec
+        print(
+            f"[INFO] waiting for {asset.name} to register Hakoniwa asset "
+            f"{expected!r} (timeout: {timeout_sec:g} seconds)..."
+        )
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            if any(not running.runner.is_alive() for running in self.procs):
+                return False
+            _, names = self.asset_list_provider.list_assets(
+                timeout=min(command_timeout_sec, remaining)
+            )
+            if expected in names:
+                print(f"[INFO] Hakoniwa asset registered: {expected}")
+                return True
+            time.sleep(min(poll_interval_sec, max(0.0, deadline - time.monotonic())))
 
     def _notify(self, event: str, asset: str) -> None:
         """

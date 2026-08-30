@@ -39,6 +39,33 @@ class HakoCli:
     def reset(self, *, timeout: Optional[float] = None) -> int:
         return self._run("reset", timeout=timeout)
 
+    def list_assets(self, *, timeout: Optional[float] = None) -> tuple[int, set[str]]:
+        """Return registered Hakoniwa asset names without leaking probe output."""
+        env = merge_env(
+            defaults_env=self.defaults_env_ops,
+            asset_env=None,
+            asset_name="hako_cli",
+        )
+        resolved = self._resolve_cmd(env)
+        try:
+            proc = subprocess.run(
+                [resolved, "ls"],
+                cwd=str(self.spec.base_dir),
+                env=env,
+                check=False,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.TimeoutExpired:
+            return 124, set()
+        names = {
+            line.strip()
+            for line in proc.stdout.splitlines()
+            if line.strip()
+        }
+        return int(proc.returncode), names
+
     # ---- internals ----
     def _resolve_cmd(self, env: dict[str, str]) -> str:
         path = env.get("PATH")

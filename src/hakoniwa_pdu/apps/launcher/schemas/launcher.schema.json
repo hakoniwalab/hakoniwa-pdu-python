@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Hakoniwa Launcher (No-Health)",
+  "title": "Hakoniwa Launcher",
   "$id": "https://hakoniwa.dev/schemas/launcher.schema.json",
   "type": "object",
   "required": ["assets"],
@@ -103,7 +103,24 @@
           "description": "アセットを起動するタイミング。before_start (hako-cmd start前) or after_start (hako-cmd start後)"
         },
         "depends_on": { "type": "array", "items": { "type": "string" }, "default": [] },
-        "start_grace_sec": { "type": "number", "minimum": 0 }
+        "start_grace_sec": { "type": "number", "minimum": 0 },
+        "readiness": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": { "const": "hako_asset" },
+                "asset_name": { "type": "string", "minLength": 1 },
+                "timeout_sec": { "type": "number", "exclusiveMinimum": 0, "default": 30 },
+                "poll_interval_sec": { "type": "number", "exclusiveMinimum": 0, "default": 0.2 },
+                "command_timeout_sec": { "type": "number", "exclusiveMinimum": 0, "default": 1 }
+              },
+              "required": ["type", "asset_name"],
+              "additionalProperties": false
+            }
+          ],
+          "description": "Optional readiness gate. Omit for processes that do not register as Hakoniwa assets."
+        }
       },
       "additionalProperties": false
     }

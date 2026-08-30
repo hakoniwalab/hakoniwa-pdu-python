@@ -23,6 +23,7 @@ class EffectiveAsset(BaseModel):
     activation_timing: str
     depends_on: List[str] = Field(default_factory=list)
     start_grace_sec: float  # defaults を必ず反映して non-optional にする
+    readiness: Optional[dict] = None
 
     # env は次段で扱うため素のまま保持
     env: Optional[dict] = None  # 型は EnvOps の dict 表現（合成は envmerge 側）

@@ -331,7 +331,12 @@ asset definition.
       "name": "drone",
       "command": "linux-main_hako_aircraft_service_px4",
       "args": ["127.0.0.1", "4560"],
-      "activation_timing": "before_start"
+      "activation_timing": "before_start",
+      "readiness": {
+        "type": "hako_asset",
+        "asset_name": "drone",
+        "timeout_sec": 30
+      }
     }
   ]
 }
@@ -375,7 +380,14 @@ are preserved for runtime expansion inside log paths and environment settings.�
 | `activation_timing`  | `before_start` launches prior to `hako-cmd start`; `after_start` launches only after a successful `hako-cmd start`.【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】【F:src/hakoniwa_pdu/apps/launcher/hako_launcher.py†L28-L70】 |
 | `depends_on`         | List of other asset names that must start before this one. Cycles are rejected during load.【F:src/hakoniwa_pdu/apps/launcher/model.py†L112-L167】 |
 | `start_grace_sec`    | Asset-specific stability grace period overriding `defaults.start_grace_sec`.【F:src/hakoniwa_pdu/apps/launcher/model.py†L94-L107】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L40-L77】 |
+| `readiness`          | Optional readiness gate. `type: "hako_asset"` polls bounded `hako-cmd ls` calls until `asset_name` is registered, before launching the next process. Omit this field for HTTP servers, external clients, and other processes that do not register as Hakoniwa assets. |
 | `env`                | Environment overrides merged on top of `defaults.env`. Supports `${asset}`, `${timestamp}`, and `${ENV:VAR}` substitutions at runtime.【F:src/hakoniwa_pdu/apps/launcher/envmerge.py†L14-L103】 |
+
+The `hako_asset` readiness gate accepts `timeout_sec` (default `30`),
+`poll_interval_sec` (default `0.2`), and `command_timeout_sec` (default `1`).
+The command timeout prevents a stalled `hako-cmd ls` probe from blocking the
+Launcher indefinitely. A readiness timeout aborts startup before
+`hako-cmd start` is issued.
 
 #### Notify section
 

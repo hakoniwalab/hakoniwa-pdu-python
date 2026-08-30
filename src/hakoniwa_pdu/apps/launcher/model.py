@@ -2,7 +2,15 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Union, Literal, Iterable
-from pydantic import BaseModel, Field, AnyHttpUrl, ConfigDict, NonNegativeFloat, field_validator
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeFloat,
+    PositiveFloat,
+    field_validator,
+)
 
 
 # =========================
@@ -47,6 +55,18 @@ class Defaults(BaseModel):
     delay_sec: NonNegativeFloat = 3.0
 
 
+class HakoAssetReadiness(BaseModel):
+    """Optional readiness gate backed by ``hako-cmd ls``."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: Literal["hako_asset"] = "hako_asset"
+    asset_name: str = Field(min_length=1)
+    timeout_sec: PositiveFloat = 30.0
+    poll_interval_sec: PositiveFloat = 0.2
+    command_timeout_sec: PositiveFloat = 1.0
+
+
 class Asset(BaseModel):
     """起動対象1件の定義。"""
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -71,6 +91,10 @@ class Asset(BaseModel):
 
     # 起動安定化の猶予（将来の判定用）。未指定なら defaults を使用。
     start_grace_sec: Optional[NonNegativeFloat] = None
+
+    # 箱庭アセット登録を行うプロセスだけが明示する。未指定時は従来どおり
+    # プロセス生存確認のみで次のアセットへ進む。
+    readiness: Optional[HakoAssetReadiness] = None
 
     @field_validator("depends_on")
     @classmethod
