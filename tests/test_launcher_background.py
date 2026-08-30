@@ -407,6 +407,8 @@ def test_partial_activation_failure_cleans_up_started_assets():
     service.monitor = PartialMonitor()
     service._stop_watch = threading.Event()
     service._watch_thread = None
+    service._prepare_cli = lambda: None
+    service._prepare_runtime = lambda: None
 
     with pytest.raises(RuntimeError, match="second asset failed"):
         service.activate()

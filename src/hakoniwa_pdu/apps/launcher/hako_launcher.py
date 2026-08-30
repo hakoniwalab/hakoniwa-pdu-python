@@ -15,6 +15,8 @@ from typing import Optional
 from .loader import load
 from .hako_monitor import HakoMonitor
 from .hako_cli import HakoCli
+from .envmerge import merge_env
+from .hako_runtime_cleanup import cleanup_runtime_mmap
 from .hako_launcher_control import (
     LauncherControlError,
     LauncherControlServer,
@@ -49,6 +51,39 @@ class LauncherService:
         self.state: str = "IDLE"
         self._watch_thread: Optional[threading.Thread] = None
         self._stop_watch = threading.Event()
+        self._cli_prepared = False
+
+    def _prepare_cli(self) -> None:
+        if self._cli_prepared:
+            return
+        version, bounded_lock_wait = self.cli.prepare()
+        version_text = ".".join(str(value) for value in version) if version else "unknown"
+        if bounded_lock_wait:
+            print(
+                f"[INFO] hako-cmd {version_text}: bounded file-lock waits enabled"
+            )
+        else:
+            print(
+                f"[WARN] hako-cmd {version_text}: legacy compatibility mode; "
+                "readiness uses only the Python subprocess timeout",
+                file=sys.stderr,
+            )
+        self._cli_prepared = True
+
+    def _prepare_runtime(self) -> None:
+        runtime = self.launcher_spec.runtime
+        if runtime is None or not runtime.cleanup_mmap_on_start:
+            return
+        env = merge_env(
+            defaults_env=self.defaults_env_ops,
+            asset_env=None,
+            asset_name="hako_launcher",
+        )
+        removed = cleanup_runtime_mmap(env=env, base_dir=self.spec.base_dir)
+        print(
+            f"[INFO] removed {len(removed)} stale Hakoniwa runtime file(s) "
+            "before asset startup"
+        )
 
     # -------- 状態遷移API --------
     def activate(self) -> None:
@@ -62,6 +97,9 @@ class LauncherService:
                 defaults_env_ops=self.defaults_env_ops,
                 asset_list_provider=self.cli,
             )
+
+        self._prepare_cli()
+        self._prepare_runtime()
 
         print("[INFO] activating 'before_start' assets...")
         self.state = "ACTIVATING"

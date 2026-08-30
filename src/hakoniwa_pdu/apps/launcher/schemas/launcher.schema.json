@@ -6,6 +6,17 @@
   "required": ["assets"],
   "properties": {
     "version": { "type": "string" },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "cleanup_mmap_on_start": {
+          "type": "boolean",
+          "default": false,
+          "description": "Before assets start, remove Hakoniwa mmap and lock files from core_mmap_path. Enable only when this Launcher exclusively owns that runtime directory."
+        }
+      },
+      "additionalProperties": false
+    },
     "defaults": {
       "type": "object",
       "properties": {

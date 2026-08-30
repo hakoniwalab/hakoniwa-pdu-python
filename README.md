@@ -314,6 +314,9 @@ asset definition.
 ```jsonc
 {
   "version": "0.1",
+  "runtime": {
+    "cleanup_mmap_on_start": false
+  },
   "defaults": {
     "cwd": ".",
     "stdout": "logs/${asset}.out",
@@ -347,6 +350,7 @@ asset definition.
 | Key        | Description |
 | ---------- | ----------- |
 | `version`  | Free-form version string for the specification.【F:src/hakoniwa_pdu/apps/launcher/model.py†L82-L90】 |
+| `runtime`  | Optional Launcher-owned runtime preparation. `cleanup_mmap_on_start` is disabled by default and removes only Hakoniwa mmap/lock files before any asset starts. Enable it only when this Launcher exclusively owns the configured runtime directory. |
 | `defaults` | Shared defaults applied to every asset when the field is omitted at the asset level. Paths are resolved relative to the launch file.【F:src/hakoniwa_pdu/apps/launcher/loader.py†L47-L91】 |
 | `assets`   | Array of process definitions. Launch order is automatically sorted by `depends_on` while preserving the original order when there is no dependency.【F:src/hakoniwa_pdu/apps/launcher/model.py†L112-L167】 |
 | `notify`   | Optional notification that fires when an asset exits or the launcher aborts. Supports `webhook` and `exec` variants.【F:src/hakoniwa_pdu/apps/launcher/model.py†L58-L80】【F:src/hakoniwa_pdu/apps/launcher/hako_monitor.py†L83-L121】 |
@@ -388,6 +392,19 @@ The `hako_asset` readiness gate accepts `timeout_sec` (default `30`),
 The command timeout prevents a stalled `hako-cmd ls` probe from blocking the
 Launcher indefinitely. A readiness timeout aborts startup before
 `hako-cmd start` is issued.
+
+At Launcher activation, `hako-cmd --version` is checked once. With hako-cmd
+1.0.1 or newer, each command receives a bounded native file-lock wait; readiness
+keeps its slightly longer Python subprocess timeout as an outer watchdog. Older
+or unrecognized hako-cmd versions remain on the legacy command line, so existing
+installations continue to work without the new option.
+
+When `runtime.cleanup_mmap_on_start` is `true`, the Launcher resolves
+`HAKO_CONFIG_PATH`, reads `core_mmap_path`, and removes only `mmap-0x*.bin`,
+`flock.bin`, `pdu_init.lock`, and `pro_init.lock` before starting any asset. It
+does not delete runtime files on shutdown. This option is an explicit ownership
+declaration: do not enable it when another Launcher or Hakoniwa process may use
+the same mmap directory.
 
 #### Notify section
 

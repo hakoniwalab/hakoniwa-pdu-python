@@ -31,18 +31,46 @@ class LauncherReadinessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             cli = HakoCli(SimpleNamespace(base_dir=Path(temporary)))
             cli._resolve_cmd = lambda env: "/test/hako-cmd"
+            version = SimpleNamespace(
+                returncode=0,
+                stdout="hako-cmd version 1.0.1\n",
+            )
             completed = SimpleNamespace(
                 returncode=0,
                 stdout="drone-1\nShowRunnerAsset\n",
             )
-            with mock.patch.object(subprocess, "run", return_value=completed) as run:
+            with mock.patch.object(
+                subprocess, "run", side_effect=[version, completed]
+            ) as run:
                 rc, names = cli.list_assets(timeout=0.5)
 
             self.assertEqual(rc, 0)
             self.assertEqual(names, {"drone-1", "ShowRunnerAsset"})
-            self.assertEqual(run.call_args.args[0], ["/test/hako-cmd", "ls"])
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_args_list[0].args[0], ["/test/hako-cmd", "--version"])
+            self.assertEqual(
+                run.call_args.args[0],
+                ["/test/hako-cmd", "ls", "--lock-timeout-ms", "400"],
+            )
             self.assertTrue(run.call_args.kwargs["capture_output"])
             self.assertEqual(run.call_args.kwargs["timeout"], 0.5)
+
+    def test_hako_cli_uses_legacy_command_for_old_version(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cli = HakoCli(SimpleNamespace(base_dir=Path(temporary)))
+            cli._resolve_cmd = lambda env: "/test/hako-cmd"
+            version = SimpleNamespace(
+                returncode=0,
+                stdout="hako-cmd version 1.0.0\n",
+            )
+            completed = SimpleNamespace(returncode=0, stdout="drone-1\n")
+            with mock.patch.object(
+                subprocess, "run", side_effect=[version, completed]
+            ) as run:
+                rc, names = cli.list_assets(timeout=0.5)
+
+            self.assertEqual((rc, names), (0, {"drone-1"}))
+            self.assertEqual(run.call_args.args[0], ["/test/hako-cmd", "ls"])
 
     def test_hako_cli_list_assets_bounds_a_hung_probe(self):
         with tempfile.TemporaryDirectory() as temporary:

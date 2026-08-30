@@ -55,6 +55,16 @@ class Defaults(BaseModel):
     delay_sec: NonNegativeFloat = 3.0
 
 
+class RuntimeOptions(BaseModel):
+    """Launcher-owned runtime preparation options."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    # Opt-in because removing mmap files assumes this Launcher has exclusive
+    # ownership of the configured Hakoniwa runtime directory.
+    cleanup_mmap_on_start: bool = False
+
+
 class HakoAssetReadiness(BaseModel):
     """Optional readiness gate backed by ``hako-cmd ls``."""
 
@@ -135,6 +145,7 @@ class LauncherSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=True, str_strip_whitespace=True)
 
     version: Optional[str] = None
+    runtime: Optional[RuntimeOptions] = None
     defaults: Optional[Defaults] = None
     assets: List[Asset]
     notify: Optional[Notify] = Field(default=None, discriminator="type")
