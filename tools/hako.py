@@ -129,6 +129,8 @@ class Context:
         manifest: Path,
     ) -> None:
         self.root = repo_root()
+        state_dir = getattr(args, "state_dir", None)
+        self.state_dir = Path(state_dir).expanduser().resolve() if state_dir else None
         self.manifest = manifest
         self.build_dir = _path(args.build_dir or cfg["build"]["dir"], self.root)
         self.install_dir = _path(
@@ -149,6 +151,10 @@ class Context:
             "amd64": "x64",
             "aarch64": "arm64",
         }.get(machine, machine)
+
+    @property
+    def hako_state_dir(self) -> Path:
+        return self.state_dir or self.root / ".hako"
 
     @property
     def venv_dir(self) -> Path:
@@ -264,7 +270,7 @@ def _yaml_scalar(value: Any) -> str:
 
 
 def write_resolved(ctx: Context, operation: str) -> Path:
-    path = ctx.root / ".hako" / "resolved-build.yaml"
+    path = ctx.hako_state_dir / "resolved-build.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "\n".join(
@@ -423,7 +429,7 @@ def write_receipt(ctx: Context, package: Mapping[str, str]) -> Path:
     )
     (ctx.install_dir / resolved_relative).parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(
-        ctx.root / ".hako" / "resolved-build.yaml",
+        ctx.hako_state_dir / "resolved-build.yaml",
         ctx.install_dir / resolved_relative,
     )
     dependency = _read_core_receipt(ctx)
@@ -557,6 +563,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--build-dir", default=None)
     parser.add_argument("--install-dir", default=None)
     parser.add_argument("--core-root", default=None)
+    parser.add_argument("--state-dir", default=None, help="generated state directory (default: repository root/.hako; relative to cwd)")
     return parser
 
 
