@@ -5,11 +5,11 @@ from ..pdu_cdr_runtime import CdrReader, CdrWriter
 
 
 def py_to_cdr_body_Empty(writer: CdrWriter, src: Empty):
-    return
+    writer.write_uint8(src.hako_dummy)
 
 
 def cdr_body_to_py_Empty(reader: CdrReader, dst: Empty):
-    return dst
+    dst.hako_dummy = reader.read_uint8()
     return dst
 
 

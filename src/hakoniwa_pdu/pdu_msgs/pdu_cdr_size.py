@@ -227,7 +227,7 @@ PDU_CDR_SIZE = {
     "std_msgs/ByteMultiArray": 16,
     "std_msgs/Char": 5,
     "std_msgs/ColorRGBA": 20,
-    "std_msgs/Empty": 4,
+    "std_msgs/Empty": 5,
     "std_msgs/Float32": 8,
     "std_msgs/Float32MultiArray": 16,
     "std_msgs/Float64": 12,
