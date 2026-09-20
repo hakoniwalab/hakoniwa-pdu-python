@@ -389,6 +389,9 @@ def test_normal_activate_preserves_hako_cmd_preflight():
         def start_assets(self, timing):
             calls.append(timing)
 
+        def abort(self, reason):
+            self.procs.clear()
+
     service = object.__new__(hako_launcher.LauncherService)
     service.state = "IDLE"
     service.monitor = EmptyMonitor()
