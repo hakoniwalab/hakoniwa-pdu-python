@@ -347,6 +347,92 @@ def test_activate_only_background_mode_is_forwarded_to_worker(
     assert "--_background-mode=activate-only" in captured_command
 
 
+def test_activate_does_not_require_hako_cmd_for_process_only_assets():
+    class EmptyMonitor:
+        def __init__(self):
+            self.procs = []
+            self.start_calls = []
+            self.abort_calls = []
+
+        def start_assets(self, timing):
+            self.start_calls.append(timing)
+
+        def abort(self, reason):
+            self.abort_calls.append(reason)
+
+    service = object.__new__(hako_launcher.LauncherService)
+    service.state = "IDLE"
+    service.monitor = EmptyMonitor()
+    service._stop_watch = threading.Event()
+    service._watch_thread = None
+    service._prepare_runtime = lambda: None
+    service._prepare_cli = lambda: (_ for _ in ()).throw(
+        AssertionError("activate() must not require hako-cmd")
+    )
+
+    service.activate(require_hako_cmd=False)
+
+    assert service.state == "ACTIVATED"
+    assert service.monitor.start_calls == ["before_start"]
+
+    service.terminate()
+    assert service.state == "TERMINATED"
+
+
+def test_normal_activate_preserves_hako_cmd_preflight():
+    calls = []
+
+    class EmptyMonitor:
+        def __init__(self):
+            self.procs = []
+
+        def start_assets(self, timing):
+            calls.append(timing)
+
+        def abort(self, reason):
+            self.procs.clear()
+
+    service = object.__new__(hako_launcher.LauncherService)
+    service.state = "IDLE"
+    service.monitor = EmptyMonitor()
+    service._stop_watch = threading.Event()
+    service._watch_thread = None
+    service._prepare_runtime = lambda: calls.append("runtime")
+    service._prepare_cli = lambda: calls.append("prepare")
+
+    service.activate()
+
+    assert service.state == "ACTIVATED"
+    assert calls == ["prepare", "runtime", "before_start"]
+
+    service.terminate()
+
+
+def test_lifecycle_command_still_prepares_hako_cmd():
+    calls = []
+
+    class FakeCli:
+        def start(self):
+            calls.append("start")
+            return 0
+
+    class FakeMonitor:
+        def start_assets(self, timing):
+            calls.append(timing)
+
+    service = object.__new__(hako_launcher.LauncherService)
+    service.state = "ACTIVATED"
+    service.cli = FakeCli()
+    service.monitor = FakeMonitor()
+    service._prepare_cli = lambda: calls.append("prepare")
+
+    rc = service.cmd("start")
+
+    assert rc == 0
+    assert calls == ["prepare", "start", "after_start"]
+    assert service.state == "RUNNING"
+
+
 def test_activate_only_background_worker_does_not_start_simulation(
     tmp_path,
     monkeypatch,
@@ -357,8 +443,9 @@ def test_activate_only_background_worker_does_not_start_simulation(
             self.state = "IDLE"
             self.activate_calls = 0
 
-        def activate(self):
+        def activate(self, *, require_hako_cmd=True):
             self.activate_calls += 1
+            self.require_hako_cmd = require_hako_cmd
             self.state = "ACTIVATED"
 
     class FakeControlServer:
@@ -384,6 +471,7 @@ def test_activate_only_background_worker_does_not_start_simulation(
 
     assert rc == 0
     assert service.activate_calls == 1
+    assert service.require_hako_cmd is False
     assert service.cmd_calls == []
     assert service.state == "ACTIVATED"
 
