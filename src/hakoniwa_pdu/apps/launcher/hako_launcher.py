@@ -86,7 +86,7 @@ class LauncherService:
         )
 
     # -------- 状態遷移API --------
-    def activate(self) -> None:
+    def activate(self, *, require_hako_cmd: bool = True) -> None:
         if self.state not in ("IDLE", "TERMINATED"):
             print(f"[launcher] activate: invalid state={self.state}", file=sys.stderr)
             return
@@ -98,10 +98,11 @@ class LauncherService:
                 asset_list_provider=self.cli,
             )
 
-        # Activation only starts launcher-managed processes. Do not require
-        # hako-cmd here: Core-free process sets (for example Bridge/Web tools)
-        # must be able to run in activate-only mode. A hako_asset readiness
-        # probe will still resolve hako-cmd lazily through HakoMonitor when used.
+        # Preserve the historical fail-fast hako-cmd check for normal
+        # activation paths. activate-only can explicitly opt out so that
+        # process-only/Core-free launch files do not need Hakoniwa Core.
+        if require_hako_cmd:
+            self._prepare_cli()
         self._prepare_runtime()
 
         print("[INFO] activating 'before_start' assets...")
@@ -445,7 +446,7 @@ def _run_background_worker(
     log_path = _background_log_path(session_path)
     server: LauncherControlServer | None = None
     try:
-        service.activate()
+        service.activate(require_hako_cmd=(mode != "activate-only"))
         if mode == "immediate":
             rc = service.cmd("start")
             if rc != 0:
@@ -571,7 +572,7 @@ async def main(argv: list[str] | None = None) -> int:
 
     elif args.mode == "activate-only":
         try:
-            service.activate()
+            service.activate(require_hako_cmd=False)
             while service.status() not in ("TERMINATED",):
                 time.sleep(0.5)
             return 0
