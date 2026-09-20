@@ -98,7 +98,10 @@ class LauncherService:
                 asset_list_provider=self.cli,
             )
 
-        self._prepare_cli()
+        # Activation only starts launcher-managed processes. Do not require
+        # hako-cmd here: Core-free process sets (for example Bridge/Web tools)
+        # must be able to run in activate-only mode. A hako_asset readiness
+        # probe will still resolve hako-cmd lazily through HakoMonitor when used.
         self._prepare_runtime()
 
         print("[INFO] activating 'before_start' assets...")
@@ -118,9 +121,13 @@ class LauncherService:
         if self.state not in ("ACTIVATED", "RUNNING", "STOPPED"):
             print(f"[launcher] start: invalid state={self.state}", file=sys.stderr)
             return 2
-        print(f"[INFO] starting simulation (hako-cmd {command})...")
         if command not in ("start", "stop", "reset"):
             return 1
+        # Lifecycle commands are the point where hako-cmd becomes mandatory.
+        # Keeping this out of activate() lets activate-only manage Core-free
+        # processes without installing Hakoniwa Core.
+        self._prepare_cli()
+        print(f"[INFO] starting simulation (hako-cmd {command})...")
         rc = 1
         match command:
             case "start":
