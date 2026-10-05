@@ -39,10 +39,41 @@ def _path(value: str | os.PathLike[str]) -> Path:
     return Path(value).expanduser().resolve()
 
 
+# Windows refuses to replace or open a file while another process has it open
+# without delete sharing (ERROR_ACCESS_DENIED 5 / ERROR_SHARING_VIOLATION 32):
+# a status poll reading the session at the moment the launcher replaces it.
+# POSIX has no such window, so the retry is Windows only.
+_SHARING_RETRY_TIMEOUT_SEC = 2.0
+_SHARING_RETRY_INTERVAL_SEC = 0.05
+_SHARING_WINERRORS = {5, 32}
+
+
+def _windows() -> bool:
+    return os.name == "nt"
+
+
+def _sharing_violation(exc: OSError) -> bool:
+    return isinstance(exc, PermissionError) or getattr(exc, "winerror", None) in _SHARING_WINERRORS
+
+
+def _retry_on_sharing(action, *args):
+    """Run action(*args); on Windows, retry a sharing violation briefly."""
+    if not _windows():
+        return action(*args)
+    deadline = time.monotonic() + _SHARING_RETRY_TIMEOUT_SEC
+    while True:
+        try:
+            return action(*args)
+        except OSError as exc:
+            if not _sharing_violation(exc) or time.monotonic() >= deadline:
+                raise
+        time.sleep(_SHARING_RETRY_INTERVAL_SEC)
+
+
 def read_session(path: str | os.PathLike[str]) -> dict[str, Any]:
     session_path = _path(path)
     try:
-        data = json.loads(session_path.read_text(encoding="utf-8"))
+        data = json.loads(_retry_on_sharing(session_path.read_text, "utf-8"))
     except FileNotFoundError as exc:
         raise LauncherControlError(f"session file not found: {session_path}") from exc
     except (OSError, json.JSONDecodeError) as exc:
@@ -72,7 +103,7 @@ def write_session(path: str | os.PathLike[str], payload: dict[str, Any]) -> Path
             os.chmod(tmp_path, 0o600)
         except OSError:
             pass
-        os.replace(tmp_path, session_path)
+        _retry_on_sharing(os.replace, tmp_path, session_path)
     finally:
         try:
             tmp_path.unlink(missing_ok=True)
