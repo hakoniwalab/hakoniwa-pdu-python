@@ -31,6 +31,23 @@ _BACKGROUND_SHUTDOWN_TIMEOUT_SEC = 30.0
 BACKGROUND_MODES = ("immediate", "activate-only")
 
 
+# Fail-stop triggers found by the runtime health check (their report is the reason).
+_HEALTH_TRIGGERS = frozenset({"startup_runtime_integrity_abort", "runtime_integrity_abort"})
+# How long a process ending on FAILED waits for the cleanup (asset stop has its own timeouts).
+_FAILURE_CLEANUP_WAIT_SEC = 60.0
+
+
+def _trigger_reason(trigger: str, evidence: Optional[dict]) -> str:
+    exit_info = (evidence or {}).get("asset_exit")
+    if trigger == "unexpected_asset_exit" and isinstance(exit_info, dict):
+        how = (f"signal {exit_info.get('signal')}" if exit_info.get("signal") is not None
+               else f"exit code {exit_info.get('exit_code')}")
+        return f"asset {exit_info.get('asset')} exited unexpectedly ({how})"
+    if trigger == "watch_exception":
+        return f"the Launcher watch failed: {(evidence or {}).get('watch_exception')}"
+    return trigger
+
+
 class LauncherService:
     """起動・監視・停止を状態付きで提供。"""
 
@@ -52,6 +69,9 @@ class LauncherService:
         self.state: str = "IDLE"
         self._state_lock = threading.RLock()
         self._failure_cleanup_started = False
+        # Set while no fail-stop cleanup runs; the process must not exit before it is.
+        self._failure_cleanup_done = threading.Event()
+        self._failure_cleanup_done.set()
         self._watch_thread: Optional[threading.Thread] = None
         self._stop_watch = threading.Event()
         self._cli_prepared = False
@@ -195,22 +215,52 @@ class LauncherService:
         with self._state_mutex():
             if self.state == "FAILED" and self.failure_report is not None:
                 return
-            self.failure_report = {
-                **(getattr(self, "_last_health_report", None) or {}),
-                "trigger": reason,
-                **(evidence or {}),
-            }
+            last_health = getattr(self, "_last_health_report", None) or {}
+            if reason in _HEALTH_TRIGGERS:
+                # The health check found the failure: its report is the reason.
+                report = {**last_health, "trigger": reason}
+            else:
+                # Another trigger: the last periodic check (often UNKNOWN "lock
+                # busy" while the master runs) is context, not the reason.
+                report = {"trigger": reason, "reason": _trigger_reason(reason, evidence)}
+                if last_health:
+                    report["last_health_check"] = last_health
+            self.failure_report = {**report, **(evidence or {})}
             self.state = "FAILED"
             self._stop_watch.set()
             if self._failure_cleanup_started:
                 return
             self._failure_cleanup_started = True
+            done = self._cleanup_done_event()
+            done.clear()
 
-        cleanup = self._cleanup_after_failure(reason)
-        with self._state_mutex():
-            assert self.failure_report is not None
-            self.failure_report["cleanup"] = cleanup
-            self.state = "FAILED"
+        try:
+            cleanup = self._cleanup_after_failure(reason)
+            with self._state_mutex():
+                assert self.failure_report is not None
+                self.failure_report["cleanup"] = cleanup
+                self.state = "FAILED"
+        finally:
+            done.set()
+
+    def _cleanup_done_event(self) -> threading.Event:
+        event = getattr(self, "_failure_cleanup_done", None)
+        if event is None:  # lightweight test doubles
+            event = threading.Event()
+            event.set()
+            self._failure_cleanup_done = event
+        return event
+
+    def wait_for_failure_cleanup(self, timeout: Optional[float] = _FAILURE_CLEANUP_WAIT_SEC) -> bool:
+        """Wait until a running fail-stop cleanup has finished. FAILED is set
+        before the cleanup starts (so nothing else starts); a process that ends
+        on FAILED must wait here, or it would end the cleanup thread (a daemon)
+        and leave assets running. True when no cleanup is running."""
+        done = self._cleanup_done_event()
+        if done.wait(timeout):
+            return True
+        print(f"[ERROR] fail-stop cleanup did not finish within {timeout} s", file=sys.stderr)
+        return False
 
     def _failed(self) -> bool:
         with self._state_mutex():
@@ -426,6 +476,12 @@ class LauncherService:
 
 
 # -------- background lifecycle --------
+
+def _wait_for_failure_cleanup(service) -> None:
+    wait = getattr(service, "wait_for_failure_cleanup", None)
+    if wait is not None:
+        wait()
+
 
 def _background_log_path(session_file: Path) -> Path:
     return Path(f"{session_file}.log")
@@ -701,6 +757,7 @@ def _run_background_worker(
         server.serve_until_terminated()
         return 0
     except Exception as exc:
+        _wait_for_failure_cleanup(service)
         if service.status() != "FAILED":
             try:
                 service.terminate()
@@ -807,6 +864,7 @@ async def main(argv: list[str] | None = None) -> int:
                 while service.status() not in ("TERMINATED", "FAILED"):
                     time.sleep(0.5)
             if service.status() == "FAILED":
+                _wait_for_failure_cleanup(service)
                 return 1
             return 0 if rc == 0 else rc
         except Exception as e:
@@ -820,7 +878,10 @@ async def main(argv: list[str] | None = None) -> int:
             service.activate(require_hako_cmd=False)
             while service.status() not in ("TERMINATED", "FAILED"):
                 time.sleep(0.5)
-            return 1 if service.status() == "FAILED" else 0
+            if service.status() == "FAILED":
+                _wait_for_failure_cleanup(service)
+                return 1
+            return 0
         except Exception as e:
             print(f"[launcher] Exception: {e}", file=sys.stderr)
             if service.status() != "FAILED":

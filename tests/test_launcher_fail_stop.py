@@ -618,3 +618,58 @@ def test_failed_session_keeps_its_evidence_on_terminate():
     service.terminate()
     assert service.state == "FAILED"
     assert recovered == []
+
+
+def test_asset_exit_reason_is_the_exit_not_the_last_health_check():
+    # While the master runs, a periodic check is often UNKNOWN ("OS file lock is
+    # busy"); an asset exit must not be reported with that reason.
+    service = bare_service(RuntimeHealth("UNKNOWN", "OS file lock is busy", {}))
+    service._check_runtime_health()
+    service._fail_stop(
+        "unexpected_asset_exit",
+        evidence={"asset_exit": {"asset": "plant", "pid": 7, "exit_code": 1, "signal": None}},
+    )
+    report = service.failure_report
+    assert report["reason"] == "asset plant exited unexpectedly (exit code 1)"
+    assert "status" not in report
+    assert report["last_health_check"]["reason"] == "OS file lock is busy"
+
+
+def test_background_worker_waits_for_the_fail_stop_cleanup(tmp_path):
+    # FAILED is set before the cleanup; the worker ends on FAILED, and its end
+    # would stop the cleanup (a daemon thread) halfway on a slow process stop.
+    service = bare_service(RuntimeHealth("ABORT", "owner died", {}))
+    release = threading.Event()
+    cleanup_started = threading.Event()
+
+    def slow_cleanup(reason):
+        cleanup_started.set()
+        release.wait(5)
+        return {"status": "OK"}
+
+    service._cleanup_after_failure = slow_cleanup
+    session = tmp_path / "session.json"
+    reserve_session(session, {"session_id": "test", "state": "STARTING"})
+    server = LauncherControlServer(
+        service=service,
+        session_path=session,
+        launch_file=tmp_path / "launch.json",
+        log_file=tmp_path / "launcher.log",
+        session_id="test",
+    )
+    failing = threading.Thread(target=service._fail_stop, args=("watch_exception",))
+    try:
+        failing.start()
+        assert cleanup_started.wait(5)
+        serving = threading.Thread(target=server.serve_until_terminated, kwargs={"poll_interval": 0.05})
+        serving.start()
+        time.sleep(0.3)
+        assert serving.is_alive()  # FAILED, but the cleanup still runs
+        release.set()
+        serving.join(5)
+        assert not serving.is_alive()
+        assert read_session(session)["failure_report"]["cleanup"] == {"status": "OK"}
+    finally:
+        release.set()
+        failing.join(5)
+        server.server_close()
