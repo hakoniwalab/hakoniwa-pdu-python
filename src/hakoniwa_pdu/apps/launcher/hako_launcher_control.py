@@ -478,6 +478,11 @@ class LauncherControlServer(socketserver.TCPServer):
                 self.handle_request()
                 self.persist()
         finally:
+            # On FAILED the cleanup runs in the watch thread; persist its result
+            # and keep this process (and that thread) alive until it is done.
+            wait = getattr(self.service, "wait_for_failure_cleanup", None)
+            if wait is not None:
+                wait()
             self.persist(force=True)
 
 
