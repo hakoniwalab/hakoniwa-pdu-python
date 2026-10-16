@@ -560,3 +560,61 @@ def test_background_startup_abort_preserves_failure_report(tmp_path):
     assert payload["failure_report"]["status"] == "ABORT"
     assert payload["failure_report"]["details"]["owner_pid"] == 42
     assert payload["failure_report"]["cleanup"]["status"] == "OK"
+
+
+class _StoppedRunner:
+    def __init__(self, pid):
+        self.pid = pid
+
+    def is_alive(self):
+        return False
+
+    def diagnostics(self):
+        return {"pid": self.pid, "alive": False, "descendants_verified_stopped": True}
+
+
+def _stopped_service(owner_pid, managed_pid=4242, alive=False):
+    abort = RuntimeHealth(
+        "ABORT",
+        "master lock owner process is no longer alive",
+        {"checks": [{"name": "master_lock", "status": "ABORT", "owner_pid": owner_pid,
+                     "reason": "master lock owner process is no longer alive"}]},
+    )
+    service = bare_service(abort)
+    service.state = "RUNNING"
+    runner = _StoppedRunner(managed_pid)
+    if alive:
+        runner.is_alive = lambda: True
+        runner.diagnostics = lambda: {"pid": managed_pid, "alive": True}
+    service.monitor.procs = [SimpleNamespace(asset=SimpleNamespace(name="car-plant"), runner=runner)]
+    recovered = []
+    service.cli = SimpleNamespace(
+        check=lambda **kwargs: abort,
+        recover=lambda **kwargs: (recovered.append(True) or (0, {"status": "RECOVERED"})),
+    )
+    return service, recovered
+
+
+def test_normal_stop_recovers_a_lock_left_by_its_own_stopped_asset():
+    # An Urban car plant is the master and takes the lock every step: a requested stop that lands
+    # while it holds the lock must not make the next start fail-stop.
+    service, recovered = _stopped_service(owner_pid=4242)
+    service.terminate()
+    assert service.state == "TERMINATED"
+    assert recovered == [True]
+
+
+def test_normal_stop_keeps_a_lock_of_an_owner_it_did_not_run():
+    service, recovered = _stopped_service(owner_pid=9999)
+    service.terminate()
+    assert service.state == "TERMINATED"
+    assert recovered == []
+
+
+def test_failed_session_keeps_its_evidence_on_terminate():
+    service, recovered = _stopped_service(owner_pid=4242)
+    service.state = "FAILED"
+    service.failure_report = {"trigger": "runtime_integrity_abort"}
+    service.terminate()
+    assert service.state == "FAILED"
+    assert recovered == []
