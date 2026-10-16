@@ -434,6 +434,41 @@ def test_lifecycle_command_still_prepares_hako_cmd():
     assert service.state == "RUNNING"
 
 
+def test_control_start_reports_failure_if_service_failed_concurrently():
+    class FailedDuringStart:
+        failure_report = {"trigger": "runtime_integrity_abort"}
+
+        def __init__(self):
+            self.state = "ACTIVATED"
+
+        def status(self):
+            return self.state
+
+        def cmd(self, command):
+            assert command == "start"
+            self.state = "FAILED"
+            return 0
+
+    server = object.__new__(LauncherControlServer)
+    server.service = FailedDuringStart()
+    server.token = "token"
+    server.session_id = "session"
+    server.persist = lambda **kwargs: None
+
+    response = server.dispatch(
+        {
+            "command": "start",
+            "token": "token",
+            "session_id": "session",
+            "pid": hako_launcher.os.getpid(),
+        }
+    )
+
+    # rc=0 cannot mask a concurrent fail-stop transition.
+    assert response["ok"] is False
+    assert response["state"] == "FAILED"
+
+
 def test_activate_only_background_worker_does_not_start_simulation(
     tmp_path,
     monkeypatch,

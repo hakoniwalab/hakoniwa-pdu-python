@@ -441,12 +441,24 @@ class LauncherControlServer(socketserver.TCPServer):
                 }
             rc = self.service.cmd("start")
             self.persist(force=True)
+            state = self.service.status()
+            ok = rc == 0 and state != "FAILED"
             return {
-                "ok": rc == 0,
+                "ok": ok,
                 "pid": os.getpid(),
-                "state": self.service.status(),
+                "state": state,
                 "returncode": rc,
-                **({} if rc == 0 else {"error": f"hako-cmd start failed with rc={rc}"}),
+                **(
+                    {}
+                    if ok
+                    else {
+                        "error": (
+                            "launcher entered FAILED while starting"
+                            if state == "FAILED"
+                            else f"hako-cmd start failed with rc={rc}"
+                        )
+                    }
+                ),
             }
         if command == "terminate":
             self.service.terminate()

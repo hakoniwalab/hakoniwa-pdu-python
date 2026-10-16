@@ -34,6 +34,8 @@ BACKGROUND_MODES = ("immediate", "activate-only")
 class LauncherService:
     """起動・監視・停止を状態付きで提供。"""
 
+    _sync_init_lock = threading.Lock()
+
     def __init__(self, *, launch_path: str) -> None:
         self.launcher_spec, self.spec = load(launch_path)  # (LauncherSpec, EffectiveSpec)
         self.defaults_env_ops = None
@@ -48,6 +50,8 @@ class LauncherService:
         )
 
         self.state: str = "IDLE"
+        self._state_lock = threading.RLock()
+        self._failure_cleanup_started = False
         self._watch_thread: Optional[threading.Thread] = None
         self._stop_watch = threading.Event()
         self._cli_prepared = False
@@ -56,11 +60,25 @@ class LauncherService:
             runtime.health_check_interval_sec if runtime is not None else 1.0
         )
         self._health_check_timeout_sec = float(
-            runtime.health_check_timeout_sec if runtime is not None else 0.8
+            runtime.health_check_timeout_sec if runtime is not None else 3.0
         )
         self._last_unknown_health_reason: Optional[str] = None
         self._last_health_report: Optional[dict] = None
         self.failure_report: Optional[dict] = None
+
+    def _state_mutex(self) -> threading.RLock:
+        """Return the lifecycle mutex, including for lightweight test doubles."""
+        lock = getattr(self, "_state_lock", None)
+        if lock is not None:
+            return lock
+        with self._sync_init_lock:
+            lock = getattr(self, "_state_lock", None)
+            if lock is None:
+                lock = threading.RLock()
+                self._state_lock = lock
+            if not hasattr(self, "_failure_cleanup_started"):
+                self._failure_cleanup_started = False
+        return lock
 
     def _prepare_cli(self) -> None:
         if self._cli_prepared:
@@ -172,28 +190,57 @@ class LauncherService:
         }
 
     def _fail_stop(self, reason: str, *, evidence: Optional[dict] = None) -> None:
-        self.failure_report = {
-            **(getattr(self, "_last_health_report", None) or {}),
-            "trigger": reason,
-            **(evidence or {}),
-        }
-        self.state = "FAILED"
-        self._stop_watch.set()
-        self.failure_report["cleanup"] = self._cleanup_after_failure(reason)
-        self.state = "FAILED"
+        # FAILED is monotonic for a session.  Only the first failure owns
+        # cleanup and its evidence; later observers must not replace either.
+        with self._state_mutex():
+            if self.state == "FAILED" and self.failure_report is not None:
+                return
+            self.failure_report = {
+                **(getattr(self, "_last_health_report", None) or {}),
+                "trigger": reason,
+                **(evidence or {}),
+            }
+            self.state = "FAILED"
+            self._stop_watch.set()
+            if self._failure_cleanup_started:
+                return
+            self._failure_cleanup_started = True
+
+        cleanup = self._cleanup_after_failure(reason)
+        with self._state_mutex():
+            assert self.failure_report is not None
+            self.failure_report["cleanup"] = cleanup
+            self.state = "FAILED"
+
+    def _failed(self) -> bool:
+        with self._state_mutex():
+            return self.state == "FAILED"
+
+    def _transition_if(self, expected: str, target: str) -> bool:
+        """Apply a lifecycle transition unless another thread moved the state."""
+        with self._state_mutex():
+            if self.state != expected or self.state == "FAILED":
+                return False
+            self.state = target
+            return True
 
     # -------- 状態遷移API --------
     def activate(self, *, require_hako_cmd: bool = True) -> None:
-        if self.state not in ("IDLE", "TERMINATED"):
-            print(f"[launcher] activate: invalid state={self.state}", file=sys.stderr)
-            return
-        # activate()は冪等ではない。再実行の場合はモニターを再生成する
-        if self.state == "TERMINATED":
-            self.monitor = HakoMonitor(
-                self.spec,
-                defaults_env_ops=self.defaults_env_ops,
-                asset_list_provider=self.cli,
-            )
+        with self._state_mutex():
+            if self.state not in ("IDLE", "TERMINATED"):
+                print(f"[launcher] activate: invalid state={self.state}", file=sys.stderr)
+                return
+            # activate()は冪等ではない。再実行の場合はモニターを再生成する
+            if self.state == "TERMINATED":
+                self.monitor = HakoMonitor(
+                    self.spec,
+                    defaults_env_ops=self.defaults_env_ops,
+                    asset_list_provider=self.cli,
+                )
+            self._stop_watch.clear()
+            self._failure_cleanup_started = False
+            self.failure_report = None
+            self.state = "ACTIVATING"
 
         # Preserve the historical fail-fast hako-cmd check for normal
         # activation paths. activate-only can explicitly opt out so that
@@ -205,72 +252,88 @@ class LauncherService:
                 raise RuntimeError("Hakoniwa runtime integrity check returned ABORT")
         self._prepare_runtime()
 
+        if self._failed():
+            return
+
         print("[INFO] activating 'before_start' assets...")
-        self.state = "ACTIVATING"
         try:
             self.monitor.start_assets("before_start")
         except Exception:
-            self.terminate()
+            if not self._failed():
+                self.terminate()
             raise
-        self._stop_watch.clear()
+        if self._failed():
+            return
         self._watch_thread = threading.Thread(target=self._watch_loop, daemon=True)
-        self.state = "ACTIVATED"
+        if not self._transition_if("ACTIVATING", "ACTIVATED"):
+            return
         print("[INFO] state -> ACTIVATED")
         self._watch_thread.start()
 
     def cmd(self, command: str) -> int:
-        if self.state not in ("ACTIVATED", "RUNNING", "STOPPED"):
-            print(f"[launcher] start: invalid state={self.state}", file=sys.stderr)
-            return 2
+        with self._state_mutex():
+            initial_state = self.state
+            if initial_state not in ("ACTIVATED", "RUNNING", "STOPPED"):
+                print(f"[launcher] start: invalid state={initial_state}", file=sys.stderr)
+                return 2
         if command not in ("start", "stop", "reset"):
             return 1
         # Lifecycle commands are the point where hako-cmd becomes mandatory.
         # Keeping this out of activate() lets activate-only manage Core-free
         # processes without installing Hakoniwa Core.
         self._prepare_cli()
+        if self._failed():
+            return 1
         print(f"[INFO] starting simulation (hako-cmd {command})...")
         rc = 1
         match command:
             case "start":
                 rc = self.cli.start()
-                if rc == 0:
+                if rc == 0 and not self._failed():
                     print("[INFO] activating 'after_start' assets...")
                     self.monitor.start_assets("after_start")
-                self.state = "RUNNING"
+                self._transition_if(initial_state, "RUNNING")
                 print(f"[INFO] hako-cmd start exited with {rc}")
             case "stop":
                 rc = self.cli.stop()
-                self.state = "STOPPED"
+                self._transition_if(initial_state, "STOPPED")
                 print(f"[INFO] hako-cmd stop exited with {rc}")
             case "reset":
                 rc = self.cli.reset()
-                self.state = "ACTIVATED"
+                self._transition_if(initial_state, "ACTIVATED")
                 print(f"[INFO] hako-cmd reset exited with {rc}")
         return rc
 
     def terminate(self) -> None:
-        if self.state == "IDLE" and not self.monitor.procs:
-            print("[launcher] terminate: already IDLE")
-            return
-        preserve_failed = self.state == "FAILED"
-        if self.state == "TERMINATED":
-            print("[launcher] terminate: verifying terminated assets...")
-        else:
-            print("[INFO] terminating all assets...")
-        self.state = "TERMINATING"
-        self._stop_watch.set()
+        with self._state_mutex():
+            if self.state == "IDLE" and not self.monitor.procs:
+                print("[launcher] terminate: already IDLE")
+                return
+            preserve_failed = self.state == "FAILED"
+            if self.state == "TERMINATED":
+                print("[launcher] terminate: verifying terminated assets...")
+            else:
+                print("[INFO] terminating all assets...")
+            if not preserve_failed:
+                self.state = "TERMINATING"
+            self._stop_watch.set()
         try:
             self.monitor.abort("terminate")
         except Exception:
-            self.state = "FAILED"
+            with self._state_mutex():
+                self.state = "FAILED"
             print("[ERROR] asset cleanup failed; state -> FAILED", file=sys.stderr)
             raise
         else:
-            self.state = "FAILED" if preserve_failed else "TERMINATED"
-            print(f"[INFO] state -> {self.state}")
+            with self._state_mutex():
+                if self.state != "FAILED" and not preserve_failed:
+                    self.state = "TERMINATED"
+                final_state = self.state
+            print(f"[INFO] state -> {final_state}")
 
     def status(self) -> str:
-        return self.state
+        with self._state_mutex():
+            return self.state
 
     # -------- 内部：監視ループ（非ブロッキング） --------
     def _watch_loop(self):
@@ -279,23 +342,35 @@ class LauncherService:
             while not self._stop_watch.is_set():
                 for rp in list(self.monitor.procs):
                     if not rp.runner.is_alive():
-                        print(f"[WARN] asset exited: {rp.asset.name} -> abort all")
                         exit_info = (
                             rp.runner.exit_info()
                             if hasattr(rp.runner, "exit_info")
                             else None
                         )
-                        self._fail_stop(
-                            "unexpected_asset_exit",
-                            evidence={
-                                "asset_exit": {
-                                    "asset": rp.asset.name,
-                                    "pid": getattr(exit_info, "pid", None),
-                                    "exit_code": getattr(exit_info, "exit_code", None),
-                                    "signal": getattr(exit_info, "signal", None),
-                                }
-                            },
-                        )
+                        exit_code = getattr(exit_info, "exit_code", None)
+                        exit_signal = getattr(exit_info, "signal", None)
+                        if exit_code == 0 and exit_signal is None:
+                            print(
+                                f"[INFO] asset completed normally: "
+                                f"{rp.asset.name} -> terminate all"
+                            )
+                            self.terminate()
+                        else:
+                            print(
+                                f"[WARN] asset exited unexpectedly: "
+                                f"{rp.asset.name} -> abort all"
+                            )
+                            self._fail_stop(
+                                "unexpected_asset_exit",
+                                evidence={
+                                    "asset_exit": {
+                                        "asset": rp.asset.name,
+                                        "pid": getattr(exit_info, "pid", None),
+                                        "exit_code": exit_code,
+                                        "signal": exit_signal,
+                                    }
+                                },
+                            )
                         return
                 now = time.monotonic()
                 if getattr(self, "_cli_prepared", False) and now >= next_health_check:

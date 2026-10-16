@@ -24,7 +24,7 @@
         "health_check_timeout_sec": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "default": 0.8,
+          "default": 3.0,
           "description": "Outer subprocess timeout for each hako-cmd check."
         }
       },

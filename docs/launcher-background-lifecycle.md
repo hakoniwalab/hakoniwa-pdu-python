@@ -54,6 +54,18 @@ include cleanup status, exceptions, survivor diagnostics, and a conservative
 `TERMINATED`; only an explicit normal termination of a healthy session produces
 `TERMINATED`.
 
+A managed asset that finishes with exit code 0 and no terminating signal is a
+normal finite-run completion, not fail-stop. The Launcher terminates the other
+managed assets and records `TERMINATED`. Nonzero, signaled, and unclassifiable
+asset exits remain `unexpected_asset_exit` failures. This distinction keeps
+finite show/scenario runners compatible while retaining fail-stop behavior for
+actual crashes.
+
+Lifecycle state changes are guarded so that once a runtime or asset failure is
+recorded, a concurrent activation, `hako-cmd start`, after-start spawn, stop,
+reset, or cleanup cannot overwrite `FAILED`. A concurrent abort also prevents
+the next asset in an activation sequence from being spawned.
+
 The session file is retained after termination with `state: "TERMINATED"` for post-run inspection.
 
 ## Session ownership and stale files

@@ -129,11 +129,22 @@ class HakoCli:
                 "hako-cmd check returned invalid JSON",
                 {"returncode": proc.returncode, "stderr": proc.stderr},
             )
+        if not isinstance(payload, dict):
+            return RuntimeHealth(
+                "UNKNOWN",
+                "hako-cmd check returned a non-object JSON payload",
+                {
+                    "returncode": proc.returncode,
+                    "payload": payload,
+                    "stderr": proc.stderr,
+                },
+            )
         if payload.get("schema_version") != 1:
             return RuntimeHealth(
                 "UNKNOWN", "hako-cmd check returned an unsupported schema", payload
             )
         checks = payload.get("checks")
+        reason = payload.get("reason")
         if not isinstance(checks, list) or any(
             not isinstance(check, dict)
             or not isinstance(check.get("name"), str)
@@ -145,11 +156,40 @@ class HakoCli:
                 "UNKNOWN", "hako-cmd check returned invalid checks", payload
             )
         status = payload.get("status")
-        if status not in ("OK", "ABORT", "UNKNOWN"):
+        if (
+            status not in ("OK", "ABORT", "UNKNOWN")
+            or not isinstance(reason, str)
+        ):
             return RuntimeHealth(
                 "UNKNOWN", "hako-cmd check returned an invalid status", payload
             )
-        return RuntimeHealth(status, str(payload.get("reason", "")), payload)
+        check_statuses = {check["status"] for check in checks}
+        aggregate_status = (
+            "ABORT"
+            if "ABORT" in check_statuses
+            else "UNKNOWN"
+            if "UNKNOWN" in check_statuses
+            else "OK"
+        )
+        if status != aggregate_status:
+            return RuntimeHealth(
+                "UNKNOWN",
+                "hako-cmd check summary is inconsistent with checks",
+                payload,
+            )
+        expected_returncode = {"OK": 0, "ABORT": 2, "UNKNOWN": 3}[status]
+        if proc.returncode != expected_returncode:
+            return RuntimeHealth(
+                "UNKNOWN",
+                "hako-cmd check status/returncode combination is invalid",
+                {
+                    **payload,
+                    "reported_status": status,
+                    "returncode": proc.returncode,
+                    "stderr": proc.stderr,
+                },
+            )
+        return RuntimeHealth(status, reason, payload)
 
     # ---- internals ----
     def _resolve_cmd(self, env: dict[str, str]) -> str:
