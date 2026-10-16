@@ -5,10 +5,19 @@ import sys
 import shutil
 import subprocess
 import re
+import json
+from dataclasses import dataclass
 from typing import Optional, Literal
 
 from .effective_model import EffectiveSpec
 from .envmerge import merge_env
+
+
+@dataclass(frozen=True)
+class RuntimeHealth:
+    status: Literal["OK", "ABORT", "UNKNOWN"]
+    reason: str
+    details: dict
 
 
 class HakoCli:
@@ -81,6 +90,52 @@ class HakoCli:
         }
         return int(proc.returncode), names
 
+    def check(self, *, timeout: float = 1.0) -> RuntimeHealth:
+        """Run the non-mutating native integrity check with an outer timeout."""
+        env = merge_env(
+            defaults_env=self.defaults_env_ops,
+            asset_env=None,
+            asset_name="hako_cli",
+        )
+        try:
+            resolved = self._resolve_cmd(env)
+        except OSError as exc:
+            return RuntimeHealth("UNKNOWN", str(exc), {})
+        if not self._supports_health_check(resolved, env):
+            return RuntimeHealth(
+                "UNKNOWN",
+                "hako-cmd does not support runtime integrity checks",
+                {"version": self._detected_version},
+            )
+        try:
+            proc = subprocess.run(
+                [resolved, "check"],
+                cwd=str(self.spec.base_dir),
+                env=env,
+                check=False,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.TimeoutExpired:
+            return RuntimeHealth("UNKNOWN", "hako-cmd check timed out", {})
+        except OSError as exc:
+            return RuntimeHealth("UNKNOWN", str(exc), {})
+        try:
+            payload = json.loads(proc.stdout)
+        except (json.JSONDecodeError, TypeError):
+            return RuntimeHealth(
+                "UNKNOWN",
+                "hako-cmd check returned invalid JSON",
+                {"returncode": proc.returncode, "stderr": proc.stderr},
+            )
+        status = payload.get("status")
+        if status not in ("OK", "ABORT", "UNKNOWN"):
+            return RuntimeHealth(
+                "UNKNOWN", "hako-cmd check returned an invalid status", payload
+            )
+        return RuntimeHealth(status, str(payload.get("reason", "")), payload)
+
     # ---- internals ----
     def _resolve_cmd(self, env: dict[str, str]) -> str:
         path = env.get("PATH")
@@ -124,6 +179,13 @@ class HakoCli:
             and self._detected_version >= (1, 0, 1)
         )
         return self._bounded_lock_wait_supported
+
+    def _supports_health_check(self, resolved: str, env: dict[str, str]) -> bool:
+        self._supports_bounded_lock_wait(resolved, env)
+        return bool(
+            self._detected_version is not None
+            and self._detected_version >= (1, 1, 0)
+        )
 
     def _command(
         self,

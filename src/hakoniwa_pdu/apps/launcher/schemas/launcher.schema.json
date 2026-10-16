@@ -12,7 +12,20 @@
         "cleanup_mmap_on_start": {
           "type": "boolean",
           "default": false,
-          "description": "Before assets start, remove Hakoniwa mmap and lock files from core_mmap_path. Enable only when this Launcher exclusively owns that runtime directory."
+          "deprecated": true,
+          "description": "Deprecated and refused by fail-stop policy. Use hako-cmd check and explicit hako-cmd recover."
+        },
+        "health_check_interval_sec": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1.0,
+          "description": "Interval in seconds between runtime integrity checks."
+        },
+        "health_check_timeout_sec": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 0.8,
+          "description": "Outer subprocess timeout for each hako-cmd check."
         }
       },
       "additionalProperties": false

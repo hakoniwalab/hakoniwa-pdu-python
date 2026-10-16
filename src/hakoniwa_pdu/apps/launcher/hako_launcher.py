@@ -16,7 +16,6 @@ from .loader import load
 from .hako_monitor import HakoMonitor
 from .hako_cli import HakoCli
 from .envmerge import merge_env
-from .hako_runtime_cleanup import cleanup_runtime_mmap
 from .hako_launcher_control import (
     LauncherControlError,
     LauncherControlServer,
@@ -52,6 +51,16 @@ class LauncherService:
         self._watch_thread: Optional[threading.Thread] = None
         self._stop_watch = threading.Event()
         self._cli_prepared = False
+        runtime = self.launcher_spec.runtime
+        self._health_check_interval_sec = float(
+            runtime.health_check_interval_sec if runtime is not None else 1.0
+        )
+        self._health_check_timeout_sec = float(
+            runtime.health_check_timeout_sec if runtime is not None else 0.8
+        )
+        self._last_unknown_health_reason: Optional[str] = None
+        self._last_health_report: Optional[dict] = None
+        self.failure_report: Optional[dict] = None
 
     def _prepare_cli(self) -> None:
         if self._cli_prepared:
@@ -74,16 +83,50 @@ class LauncherService:
         runtime = self.launcher_spec.runtime
         if runtime is None or not runtime.cleanup_mmap_on_start:
             return
-        env = merge_env(
-            defaults_env=self.defaults_env_ops,
-            asset_env=None,
-            asset_name="hako_launcher",
+        raise RuntimeError(
+            "runtime.cleanup_mmap_on_start is disabled by fail-stop policy; "
+            "inspect with 'hako-cmd check' and explicitly run "
+            "'hako-cmd recover' only after confirming all processes stopped"
         )
-        removed = cleanup_runtime_mmap(env=env, base_dir=self.spec.base_dir)
-        print(
-            f"[INFO] removed {len(removed)} stale Hakoniwa runtime file(s) "
-            "before asset startup"
-        )
+
+    def _check_runtime_health(self, *, startup: bool = False) -> str:
+        health = self.cli.check(timeout=self._health_check_timeout_sec)
+        self._last_health_report = {
+            "status": health.status,
+            "reason": health.reason,
+            "details": health.details,
+            "detected_at": time.time(),
+        }
+        if health.status == "ABORT":
+            print(
+                f"[ERROR] Hakoniwa runtime integrity ABORT: {health.reason}",
+                file=sys.stderr,
+            )
+            return "ABORT"
+        if health.status == "UNKNOWN":
+            if startup or health.reason != self._last_unknown_health_reason:
+                print(
+                    f"[WARN] Hakoniwa runtime integrity UNKNOWN: {health.reason}",
+                    file=sys.stderr,
+                )
+            self._last_unknown_health_reason = health.reason
+            return "UNKNOWN"
+        self._last_unknown_health_reason = None
+        return "OK"
+
+    def _fail_stop(self, reason: str) -> None:
+        self.failure_report = {
+            **(self._last_health_report or {}),
+            "trigger": reason,
+        }
+        self.state = "FAILED"
+        self._stop_watch.set()
+        try:
+            self.monitor.abort(reason)
+        except Exception as exc:
+            print(f"[ERROR] fail-stop cleanup failed: {exc}", file=sys.stderr)
+        finally:
+            self.state = "FAILED"
 
     # -------- 状態遷移API --------
     def activate(self, *, require_hako_cmd: bool = True) -> None:
@@ -103,6 +146,9 @@ class LauncherService:
         # process-only/Core-free launch files do not need Hakoniwa Core.
         if require_hako_cmd:
             self._prepare_cli()
+            if self._check_runtime_health(startup=True) == "ABORT":
+                self._fail_stop("startup_runtime_integrity_abort")
+                raise RuntimeError("Hakoniwa runtime integrity check returned ABORT")
         self._prepare_runtime()
 
         print("[INFO] activating 'before_start' assets...")
@@ -114,9 +160,9 @@ class LauncherService:
             raise
         self._stop_watch.clear()
         self._watch_thread = threading.Thread(target=self._watch_loop, daemon=True)
-        self._watch_thread.start()
         self.state = "ACTIVATED"
         print("[INFO] state -> ACTIVATED")
+        self._watch_thread.start()
 
     def cmd(self, command: str) -> int:
         if self.state not in ("ACTIVATED", "RUNNING", "STOPPED"):
@@ -174,12 +220,19 @@ class LauncherService:
     # -------- 内部：監視ループ（非ブロッキング） --------
     def _watch_loop(self):
         try:
-            while not self._stop_watch.is_set() and self.monitor.procs:
+            next_health_check = time.monotonic()
+            while not self._stop_watch.is_set():
                 for rp in list(self.monitor.procs):
                     if not rp.runner.is_alive():
                         print(f"[WARN] asset exited: {rp.asset.name} -> abort all")
                         self.terminate()
                         return
+                now = time.monotonic()
+                if self._cli_prepared and now >= next_health_check:
+                    if self._check_runtime_health() == "ABORT":
+                        self._fail_stop("runtime_integrity_abort")
+                        return
+                    next_health_check = now + self._health_check_interval_sec
                 time.sleep(0.2)
         except Exception as e:
             print(f"[watch] exception: {e}", file=sys.stderr)

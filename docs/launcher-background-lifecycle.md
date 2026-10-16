@@ -40,6 +40,13 @@ python -m hakoniwa_pdu.apps.launcher.hako_launcher_ctl \
 
 `terminate` calls the running Launcher's `LauncherService.terminate()` through a localhost control endpoint. Child-process cleanup therefore remains owned by the Launcher, including the existing OS-specific process-group behavior.
 
+With hako-cmd 1.1.0 or newer, the background Launcher also supervises runtime
+integrity. An `ABORT` result moves the session to `FAILED` and stops all managed
+children. It does not remove the session file, logs, mmap files, or lock files;
+recovery requires a separate, explicit `hako-cmd recover` after every related
+process has stopped. An `UNKNOWN` result is diagnostic only and is logged as a
+warning.
+
 The session file is retained after termination with `state: "TERMINATED"` for post-run inspection.
 
 ## Session ownership and stale files
