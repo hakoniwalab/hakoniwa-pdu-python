@@ -191,6 +191,33 @@ class HakoCli:
             )
         return RuntimeHealth(status, reason, payload)
 
+    def recover(self, *, timeout: float = 10.0) -> tuple[int, dict]:
+        """`hako-cmd recover`: clear the runtime files once every process is stopped. Returns the exit
+        code and the JSON report (empty when it cannot be read)."""
+        env = merge_env(defaults_env=self.defaults_env_ops, asset_env=None, asset_name="hako_cli")
+        try:
+            resolved = self._resolve_cmd(env)
+            proc = subprocess.run(
+                [resolved, "recover"],
+                cwd=str(self.spec.base_dir),
+                env=env,
+                check=False,
+                timeout=timeout,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except subprocess.TimeoutExpired:
+            return 124, {}
+        except OSError as exc:
+            return 127, {"reason": str(exc)}
+        try:
+            payload = json.loads(proc.stdout)
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+        return int(proc.returncode), payload if isinstance(payload, dict) else {}
+
     # ---- internals ----
     def _resolve_cmd(self, env: dict[str, str]) -> str:
         path = env.get("PATH")

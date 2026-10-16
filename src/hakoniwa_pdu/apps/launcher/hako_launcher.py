@@ -330,6 +330,44 @@ class LauncherService:
                     self.state = "TERMINATED"
                 final_state = self.state
             print(f"[INFO] state -> {final_state}")
+            if final_state == "TERMINATED" and not preserve_failed:
+                self._recover_after_normal_stop()
+
+    def _recover_after_normal_stop(self) -> None:
+        """A requested stop terminates the assets; one that was holding the master lock at that moment
+        leaves it recorded as held by a dead owner, and the next start would fail-stop on it (an Urban
+        car plant is the master and takes the lock every step). That is not a crash: when every managed
+        process is stopped and the dead owner is one of them, clear the runtime with `hako-cmd recover`
+        (which itself refuses while a recorded Hakoniwa process lives). A FAILED session, or an owner this
+        Launcher did not run, keeps its evidence."""
+        if not getattr(self, "_cli_prepared", False):
+            return
+        processes = self._managed_process_diagnostics()
+        if any(process.get("alive") is not False for process in processes):
+            print("[WARN] normal stop: a managed process may still be alive; runtime not recovered",
+                  file=sys.stderr)
+            return
+        try:
+            health = self.cli.check(timeout=self._health_check_timeout_sec)
+        except Exception as exc:  # diagnosis only; never fail the stop
+            print(f"[WARN] normal stop: hako-cmd check failed: {exc}", file=sys.stderr)
+            return
+        if health.status != "ABORT":
+            return
+        owners = {check.get("owner_pid") for check in health.details.get("checks", [])
+                  if isinstance(check, dict) and check.get("status") == "ABORT"}
+        managed = {process.get("pid") for process in processes if process.get("pid")}
+        if not owners or not owners <= managed:
+            print(f"[WARN] normal stop: the master lock owner {sorted(owners)} was not run by this "
+                  "Launcher; runtime left for diagnosis", file=sys.stderr)
+            return
+        rc, report = self.cli.recover()
+        if rc == 0:
+            print(f"[INFO] normal stop: cleared the lock left by stopped asset(s) {sorted(owners)} "
+                  "(hako-cmd recover)")
+        else:
+            print(f"[WARN] normal stop: hako-cmd recover returned {rc}: "
+                  f"{report.get('reason', report.get('status', ''))}", file=sys.stderr)
 
     def status(self) -> str:
         with self._state_mutex():
