@@ -63,6 +63,8 @@ class RuntimeOptions(BaseModel):
     # Opt-in because removing mmap files assumes this Launcher has exclusive
     # ownership of the configured Hakoniwa runtime directory.
     cleanup_mmap_on_start: bool = False
+    health_check_interval_sec: PositiveFloat = 1.0
+    health_check_timeout_sec: PositiveFloat = 0.8
 
 
 class HakoAssetReadiness(BaseModel):

@@ -16,7 +16,6 @@ from .loader import load
 from .hako_monitor import HakoMonitor
 from .hako_cli import HakoCli
 from .envmerge import merge_env
-from .hako_runtime_cleanup import cleanup_runtime_mmap
 from .hako_launcher_control import (
     LauncherControlError,
     LauncherControlServer,
@@ -52,6 +51,16 @@ class LauncherService:
         self._watch_thread: Optional[threading.Thread] = None
         self._stop_watch = threading.Event()
         self._cli_prepared = False
+        runtime = self.launcher_spec.runtime
+        self._health_check_interval_sec = float(
+            runtime.health_check_interval_sec if runtime is not None else 1.0
+        )
+        self._health_check_timeout_sec = float(
+            runtime.health_check_timeout_sec if runtime is not None else 0.8
+        )
+        self._last_unknown_health_reason: Optional[str] = None
+        self._last_health_report: Optional[dict] = None
+        self.failure_report: Optional[dict] = None
 
     def _prepare_cli(self) -> None:
         if self._cli_prepared:
@@ -74,16 +83,104 @@ class LauncherService:
         runtime = self.launcher_spec.runtime
         if runtime is None or not runtime.cleanup_mmap_on_start:
             return
-        env = merge_env(
-            defaults_env=self.defaults_env_ops,
-            asset_env=None,
-            asset_name="hako_launcher",
+        raise RuntimeError(
+            "runtime.cleanup_mmap_on_start is disabled by fail-stop policy; "
+            "inspect with 'hako-cmd check' and explicitly run "
+            "'hako-cmd recover' only after confirming all processes stopped"
         )
-        removed = cleanup_runtime_mmap(env=env, base_dir=self.spec.base_dir)
-        print(
-            f"[INFO] removed {len(removed)} stale Hakoniwa runtime file(s) "
-            "before asset startup"
+
+    def _check_runtime_health(self, *, startup: bool = False) -> str:
+        health = self.cli.check(timeout=self._health_check_timeout_sec)
+        self._last_health_report = {
+            "status": health.status,
+            "reason": health.reason,
+            "details": health.details,
+            "detected_at": time.time(),
+        }
+        if health.status == "ABORT":
+            print(
+                f"[ERROR] Hakoniwa runtime integrity ABORT: {health.reason}",
+                file=sys.stderr,
+            )
+            return "ABORT"
+        if health.status == "UNKNOWN":
+            if startup or health.reason != self._last_unknown_health_reason:
+                print(
+                    f"[WARN] Hakoniwa runtime integrity UNKNOWN: {health.reason}",
+                    file=sys.stderr,
+                )
+            self._last_unknown_health_reason = health.reason
+            return "UNKNOWN"
+        self._last_unknown_health_reason = None
+        return "OK"
+
+    def _managed_process_diagnostics(self) -> list[dict]:
+        diagnostics: list[dict] = []
+        for running in list(self.monitor.procs):
+            runner = running.runner
+            try:
+                detail = runner.diagnostics() if hasattr(runner, "diagnostics") else {
+                    "alive": bool(runner.is_alive()),
+                }
+            except Exception as exc:
+                detail = {
+                    "alive": None,
+                    "diagnostic_error": str(exc),
+                    "descendants_verified_stopped": False,
+                }
+            diagnostics.append({"asset": running.asset.name, **detail})
+        return diagnostics
+
+    def _cleanup_after_failure(self, reason: str) -> dict:
+        cleanup_error: str | None = None
+        try:
+            self.monitor.abort(reason)
+        except Exception as exc:
+            cleanup_error = str(exc)
+            print(f"[ERROR] fail-stop cleanup failed: {exc}", file=sys.stderr)
+
+        processes = self._managed_process_diagnostics()
+        survivors = [
+            process for process in processes if process.get("alive") is not False
+        ]
+        unverified_descendants = [
+            process for process in processes
+            if process.get("descendants_verified_stopped") is False
+        ]
+        recover_safe = (
+            cleanup_error is None
+            and not survivors
+            and not unverified_descendants
         )
+        return {
+            "status": "OK" if cleanup_error is None and not survivors else "FAILED",
+            "reason": cleanup_error or (
+                "managed processes stopped"
+                if not survivors
+                else "one or more managed processes may still be alive"
+            ),
+            "exception": cleanup_error,
+            "processes": processes,
+            "survivors": survivors,
+            "recover_safe": recover_safe,
+            "recovery_guidance": (
+                "all managed processes and descendants were verified stopped"
+                if recover_safe
+                else "do not run hako-cmd recover until remaining or unverified "
+                     "processes are checked and stopped"
+            ),
+        }
+
+    def _fail_stop(self, reason: str, *, evidence: Optional[dict] = None) -> None:
+        self.failure_report = {
+            **(getattr(self, "_last_health_report", None) or {}),
+            "trigger": reason,
+            **(evidence or {}),
+        }
+        self.state = "FAILED"
+        self._stop_watch.set()
+        self.failure_report["cleanup"] = self._cleanup_after_failure(reason)
+        self.state = "FAILED"
 
     # -------- 状態遷移API --------
     def activate(self, *, require_hako_cmd: bool = True) -> None:
@@ -103,6 +200,9 @@ class LauncherService:
         # process-only/Core-free launch files do not need Hakoniwa Core.
         if require_hako_cmd:
             self._prepare_cli()
+            if self._check_runtime_health(startup=True) == "ABORT":
+                self._fail_stop("startup_runtime_integrity_abort")
+                raise RuntimeError("Hakoniwa runtime integrity check returned ABORT")
         self._prepare_runtime()
 
         print("[INFO] activating 'before_start' assets...")
@@ -114,9 +214,9 @@ class LauncherService:
             raise
         self._stop_watch.clear()
         self._watch_thread = threading.Thread(target=self._watch_loop, daemon=True)
-        self._watch_thread.start()
         self.state = "ACTIVATED"
         print("[INFO] state -> ACTIVATED")
+        self._watch_thread.start()
 
     def cmd(self, command: str) -> int:
         if self.state not in ("ACTIVATED", "RUNNING", "STOPPED"):
@@ -152,6 +252,7 @@ class LauncherService:
         if self.state == "IDLE" and not self.monitor.procs:
             print("[launcher] terminate: already IDLE")
             return
+        preserve_failed = self.state == "FAILED"
         if self.state == "TERMINATED":
             print("[launcher] terminate: verifying terminated assets...")
         else:
@@ -165,8 +266,8 @@ class LauncherService:
             print("[ERROR] asset cleanup failed; state -> FAILED", file=sys.stderr)
             raise
         else:
-            self.state = "TERMINATED"
-            print("[INFO] state -> TERMINATED")
+            self.state = "FAILED" if preserve_failed else "TERMINATED"
+            print(f"[INFO] state -> {self.state}")
 
     def status(self) -> str:
         return self.state
@@ -174,19 +275,41 @@ class LauncherService:
     # -------- 内部：監視ループ（非ブロッキング） --------
     def _watch_loop(self):
         try:
-            while not self._stop_watch.is_set() and self.monitor.procs:
+            next_health_check = time.monotonic()
+            while not self._stop_watch.is_set():
                 for rp in list(self.monitor.procs):
                     if not rp.runner.is_alive():
                         print(f"[WARN] asset exited: {rp.asset.name} -> abort all")
-                        self.terminate()
+                        exit_info = (
+                            rp.runner.exit_info()
+                            if hasattr(rp.runner, "exit_info")
+                            else None
+                        )
+                        self._fail_stop(
+                            "unexpected_asset_exit",
+                            evidence={
+                                "asset_exit": {
+                                    "asset": rp.asset.name,
+                                    "pid": getattr(exit_info, "pid", None),
+                                    "exit_code": getattr(exit_info, "exit_code", None),
+                                    "signal": getattr(exit_info, "signal", None),
+                                }
+                            },
+                        )
                         return
+                now = time.monotonic()
+                if getattr(self, "_cli_prepared", False) and now >= next_health_check:
+                    if self._check_runtime_health() == "ABORT":
+                        self._fail_stop("runtime_integrity_abort")
+                        return
+                    next_health_check = now + self._health_check_interval_sec
                 time.sleep(0.2)
         except Exception as e:
             print(f"[watch] exception: {e}", file=sys.stderr)
-            try:
-                self.terminate()
-            except Exception as cleanup_error:
-                print(f"[watch] cleanup exception: {cleanup_error}", file=sys.stderr)
+            self._fail_stop(
+                "watch_exception",
+                evidence={"watch_exception": str(e)},
+            )
 
 
 # -------- background lifecycle --------
@@ -418,18 +541,22 @@ def _write_failed_session(
     *,
     session_id: str,
     pid: int | None = None,
+    failure_report: dict | None = None,
 ) -> None:
+    payload = {
+        "version": 1,
+        "session_id": session_id,
+        "pid": os.getpid() if pid is None else pid,
+        "launch_file": str(launch_file),
+        "log_file": str(log_file),
+        "state": "FAILED",
+        "error": error,
+    }
+    if failure_report is not None:
+        payload["failure_report"] = failure_report
     write_owned_session(
         session_file,
-        {
-            "version": 1,
-            "session_id": session_id,
-            "pid": os.getpid() if pid is None else pid,
-            "launch_file": str(launch_file),
-            "log_file": str(log_file),
-            "state": "FAILED",
-            "error": error,
-        },
+        payload,
         session_id=session_id,
     )
 
@@ -461,16 +588,18 @@ def _run_background_worker(
         server.serve_until_terminated()
         return 0
     except Exception as exc:
-        try:
-            service.terminate()
-        except Exception:
-            pass
+        if service.status() != "FAILED":
+            try:
+                service.terminate()
+            except Exception:
+                pass
         _write_failed_session(
             session_path,
             launch_path,
             log_path,
             str(exc),
             session_id=session_id,
+            failure_report=service.failure_report,
         )
         print(f"[launcher] background worker failed: {exc}", file=sys.stderr)
         return 1
@@ -562,23 +691,27 @@ async def main(argv: list[str] | None = None) -> int:
             service.activate()
             rc = service.cmd("start")
             if not args.no_watch:
-                while service.status() not in ("TERMINATED",):
+                while service.status() not in ("TERMINATED", "FAILED"):
                     time.sleep(0.5)
+            if service.status() == "FAILED":
+                return 1
             return 0 if rc == 0 else rc
         except Exception as e:
             print(f"[launcher] Exception: {e}", file=sys.stderr)
-            service.terminate()
+            if service.status() != "FAILED":
+                service.terminate()
             return 1
 
     elif args.mode == "activate-only":
         try:
             service.activate(require_hako_cmd=False)
-            while service.status() not in ("TERMINATED",):
+            while service.status() not in ("TERMINATED", "FAILED"):
                 time.sleep(0.5)
-            return 0
+            return 1 if service.status() == "FAILED" else 0
         except Exception as e:
             print(f"[launcher] Exception: {e}", file=sys.stderr)
-            service.terminate()
+            if service.status() != "FAILED":
+                service.terminate()
             return 1
 
     elif args.mode == "serve":

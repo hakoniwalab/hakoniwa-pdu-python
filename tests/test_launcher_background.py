@@ -399,6 +399,7 @@ def test_normal_activate_preserves_hako_cmd_preflight():
     service._watch_thread = None
     service._prepare_runtime = lambda: calls.append("runtime")
     service._prepare_cli = lambda: calls.append("prepare")
+    service._check_runtime_health = lambda **kwargs: "OK"
 
     service.activate()
 
@@ -497,6 +498,7 @@ def test_partial_activation_failure_cleans_up_started_assets():
     service._watch_thread = None
     service._prepare_cli = lambda: None
     service._prepare_runtime = lambda: None
+    service._check_runtime_health = lambda **kwargs: "OK"
 
     with pytest.raises(RuntimeError, match="second asset failed"):
         service.activate()

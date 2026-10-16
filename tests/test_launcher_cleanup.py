@@ -1,4 +1,6 @@
 import os
+import signal
+import subprocess
 import sys
 import threading
 import time
@@ -9,6 +11,38 @@ import pytest
 from hakoniwa_pdu.apps.launcher import hako_launcher
 from hakoniwa_pdu.apps.launcher.hako_asset_runner import AssetRunner
 from hakoniwa_pdu.apps.launcher.hako_monitor import HakoMonitor, Running
+
+
+def _pid_exists(pid: int) -> bool:
+    if os.name == "nt":
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH", "/FI", f"PID eq {pid}"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        return f'"{pid}"' in result.stdout
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def _force_kill_pid(pid: int) -> None:
+    if not _pid_exists(pid):
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    else:
+        os.kill(pid, signal.SIGKILL)
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX process-group behavior")
@@ -171,3 +205,63 @@ def test_cleanup_failure_does_not_report_terminated():
         service.terminate()
 
     assert service.state == "FAILED"
+
+
+def test_real_process_abort_stops_process_tree_and_preserves_evidence(tmp_path):
+    child_pid_file = tmp_path / "child.pid"
+    evidence = tmp_path / "flock.bin"
+    evidence.write_bytes(b"diagnostic evidence")
+    child_code = "import time; time.sleep(60)"
+    parent_code = (
+        "import pathlib, subprocess, sys, time; "
+        f"child=subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        f"pathlib.Path({str(child_pid_file)!r}).write_text(str(child.pid)); "
+        "time.sleep(60)"
+    )
+    runner = AssetRunner()
+    runner.spawn(sys.executable, ["-c", parent_code], cwd=tmp_path)
+    child_pid = None
+    try:
+        deadline = time.time() + 5
+        while not child_pid_file.exists() and time.time() < deadline:
+            time.sleep(0.02)
+        assert child_pid_file.exists()
+        child_pid = int(child_pid_file.read_text())
+        assert runner.is_alive()
+        assert _pid_exists(child_pid)
+
+        monitor = _monitor_with(runner)
+        service = object.__new__(hako_launcher.LauncherService)
+        service.state = "RUNNING"
+        service.monitor = monitor
+        service._stop_watch = threading.Event()
+        service._last_health_report = {
+            "status": "ABORT",
+            "reason": "owner died",
+            "details": {"owner_pid": 42},
+            "detected_at": time.time(),
+        }
+        service.failure_report = None
+
+        service._fail_stop("runtime_integrity_abort")
+
+        deadline = time.time() + 5
+        while _pid_exists(child_pid) and time.time() < deadline:
+            time.sleep(0.05)
+        assert service.state == "FAILED"
+        assert runner.is_alive() is False
+        assert _pid_exists(child_pid) is False
+        assert evidence.read_bytes() == b"diagnostic evidence"
+        cleanup = service.failure_report["cleanup"]
+        assert cleanup["survivors"] == []
+        assert cleanup["processes"][0]["asset"] == "asset"
+        if os.name == "nt":
+            assert cleanup["recover_safe"] is False
+            assert cleanup["processes"][0]["cleanup_scope"] == "windows_taskkill_tree"
+        else:
+            assert cleanup["recover_safe"] is True
+    finally:
+        if runner.is_alive():
+            runner.kill()
+        if child_pid is not None:
+            _force_kill_pid(child_pid)

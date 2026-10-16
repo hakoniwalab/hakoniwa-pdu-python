@@ -388,7 +388,7 @@ class LauncherControlServer(socketserver.TCPServer):
         return int(self.server_address[1])
 
     def session_payload(self) -> dict[str, Any]:
-        return {
+        payload = {
             "version": SESSION_VERSION,
             "session_id": self.session_id,
             "pid": os.getpid(),
@@ -399,6 +399,10 @@ class LauncherControlServer(socketserver.TCPServer):
             "log_file": str(self.log_file),
             "state": self.service.status(),
         }
+        failure_report = getattr(self.service, "failure_report", None)
+        if failure_report is not None:
+            payload["failure_report"] = failure_report
+        return payload
 
     def persist(self, *, force: bool = False) -> None:
         state = self.service.status()
@@ -455,7 +459,10 @@ class LauncherControlServer(socketserver.TCPServer):
         self.timeout = poll_interval
         self.persist(force=True)
         try:
-            while not self.stop_requested and self.service.status() != "TERMINATED":
+            while (
+                not self.stop_requested
+                and self.service.status() not in _TERMINAL_STATES
+            ):
                 self.handle_request()
                 self.persist()
         finally:
