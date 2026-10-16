@@ -316,7 +316,7 @@ asset definition.
   "version": "0.1",
   "runtime": {
     "health_check_interval_sec": 1.0,
-    "health_check_timeout_sec": 0.8
+    "health_check_timeout_sec": 3.0
   },
   "defaults": {
     "cwd": ".",
@@ -407,7 +407,10 @@ with a `checks[]` array; an unsupported or malformed report is `UNKNOWN`.
 and terminates every managed process. `UNKNOWN` is reported as a warning and
 does not trigger destructive action. Every check has an outer subprocess
 timeout, configured by `runtime.health_check_timeout_sec`; the periodic interval
-is `runtime.health_check_interval_sec`.
+is `runtime.health_check_interval_sec`. The default outer timeout is 3 seconds
+to accommodate Windows process creation and security-scanner latency. The
+native `check` itself still uses a nonblocking OS try-lock, so increasing this
+outer watchdog does not turn runtime lock inspection into an unbounded wait.
 
 The Launcher never repairs or deletes a failed runtime automatically. The old
 `runtime.cleanup_mmap_on_start` field is retained only for input compatibility;
@@ -416,14 +419,18 @@ setting it to `true` now refuses startup. Inspect the evidence with
 explicitly. Launcher session files and asset logs remain available after a
 fail-stop event.
 
-An unexpected asset exit is also fail-stop: the asset name, PID, exit code or
-signal, cleanup exception, and post-cleanup process diagnostics are stored in
-`failure_report`. Successful cleanup does not replace `FAILED` with
-`TERMINATED`. `failure_report.cleanup.recover_safe` is true only when every
-managed process and descendant scope was verified stopped. In particular,
-Windows uses `taskkill /T /F` for native process trees but cannot independently
-enumerate descendants after a parent has already disappeared; that limitation
-is recorded and recovery remains unsafe until the operator checks it.
+An asset that exits with code 0 and no terminating signal is treated as a
+completed run: the Launcher stops the remaining assets and reaches
+`TERMINATED`, preserving the pre-fail-stop Launcher behavior used by finite
+show/scenario runners. A nonzero, signaled, or unclassifiable exit is fail-stop:
+the asset name, PID, exit code or signal, cleanup exception, and post-cleanup
+process diagnostics are stored in `failure_report`. Successful cleanup does
+not replace `FAILED` with `TERMINATED`. `failure_report.cleanup.recover_safe`
+is true only when every managed process and descendant scope was verified
+stopped. In particular, Windows uses `taskkill /T /F` for native process trees
+but cannot independently enumerate descendants after a parent has already
+disappeared; that limitation is recorded and recovery remains unsafe until the
+operator checks it.
 
 #### Notify section
 

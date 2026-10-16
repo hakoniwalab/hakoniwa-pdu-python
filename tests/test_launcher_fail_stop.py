@@ -115,6 +115,78 @@ def bare_service(health: RuntimeHealth) -> LauncherService:
     return service
 
 
+def _check_result(monkeypatch, tmp_path, *, payload, returncode):
+    cli = HakoCli(SimpleNamespace(base_dir=tmp_path))
+    cli._detected_version = (1, 1, 0)
+    cli._bounded_lock_wait_supported = True
+    monkeypatch.setattr(cli, "_resolve_cmd", lambda env: "hako-cmd")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: Result(
+            returncode=returncode,
+            stdout=json.dumps(payload),
+        ),
+    )
+    return cli.check(timeout=0.25)
+
+
+@pytest.mark.parametrize("payload", [[], None, 1, "OK"])
+def test_hako_cli_check_non_object_payload_is_unknown(
+    monkeypatch, tmp_path, payload
+):
+    health = _check_result(
+        monkeypatch,
+        tmp_path,
+        payload=payload,
+        returncode=0,
+    )
+    assert health.status == "UNKNOWN"
+    assert "non-object" in health.reason
+
+
+@pytest.mark.parametrize(
+    ("status", "returncode"),
+    [("OK", 2), ("ABORT", 0), ("UNKNOWN", 0)],
+)
+def test_hako_cli_check_status_returncode_mismatch_is_unknown(
+    monkeypatch, tmp_path, status, returncode
+):
+    health = _check_result(
+        monkeypatch,
+        tmp_path,
+        payload={
+            "schema_version": 1,
+            "status": status,
+            "reason": "test",
+            "checks": [
+                {"name": "master_lock", "status": status, "reason": "test"}
+            ],
+        },
+        returncode=returncode,
+    )
+    assert health.status == "UNKNOWN"
+    assert "status/returncode" in health.reason
+
+
+def test_hako_cli_check_inconsistent_summary_is_unknown(monkeypatch, tmp_path):
+    health = _check_result(
+        monkeypatch,
+        tmp_path,
+        payload={
+            "schema_version": 1,
+            "status": "OK",
+            "reason": "healthy",
+            "checks": [
+                {"name": "master_lock", "status": "ABORT", "reason": "dead"}
+            ],
+        },
+        returncode=0,
+    )
+    assert health.status == "UNKNOWN"
+    assert "inconsistent" in health.reason
+
+
 def test_startup_abort_fails_before_spawning_assets():
     service = bare_service(RuntimeHealth("ABORT", "owner died", {}))
     with pytest.raises(RuntimeError, match="returned ABORT"):
@@ -234,6 +306,161 @@ def test_unexpected_asset_exit_stays_failed_and_records_exit():
         "signal": None,
     }
     assert service.failure_report["cleanup"]["status"] == "OK"
+
+
+def test_asset_exit_zero_terminates_session_without_failure():
+    class CompletedRunner:
+        def is_alive(self):
+            return False
+
+        def exit_info(self):
+            return SimpleNamespace(pid=321, exit_code=0, signal=None)
+
+    service = bare_service(RuntimeHealth("OK", "healthy", {}))
+    service.state = "RUNNING"
+    service.monitor.procs = [
+        SimpleNamespace(
+            asset=SimpleNamespace(name="show-runner"),
+            runner=CompletedRunner(),
+        )
+    ]
+
+    service._watch_loop()
+
+    assert service.state == "TERMINATED"
+    assert service.failure_report is None
+    assert service.monitor.abort_calls == ["terminate"]
+
+
+class BlockingStartMonitor(Monitor):
+    def __init__(self, entered: threading.Event, release: threading.Event):
+        super().__init__()
+        self.entered = entered
+        self.release = release
+        self.aborted = False
+        self.spawned = []
+
+    def start_assets(self, timing):
+        self.start_calls.append(timing)
+        self.spawned.append(f"{timing}-first")
+        self.entered.set()
+        assert self.release.wait(timeout=2)
+        if not self.aborted:
+            self.spawned.append(f"{timing}-second")
+
+    def abort(self, reason):
+        self.aborted = True
+        super().abort(reason)
+
+
+def test_abort_during_activate_cannot_be_overwritten_or_spawn_more_assets():
+    entered = threading.Event()
+    release = threading.Event()
+    service = bare_service(RuntimeHealth("OK", "healthy", {}))
+    service.monitor = BlockingStartMonitor(entered, release)
+    worker = threading.Thread(target=service.activate)
+    worker.start()
+    assert entered.wait(timeout=2)
+    service._fail_stop("runtime_integrity_abort")
+    release.set()
+    worker.join(timeout=2)
+
+    assert not worker.is_alive()
+    assert service.state == "FAILED"
+    assert service.monitor.spawned == ["before_start-first"]
+    assert service.monitor.abort_calls == ["runtime_integrity_abort"]
+
+
+def test_abort_while_hako_cmd_start_runs_skips_after_start_and_stays_failed():
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockingCli:
+        def start(self):
+            entered.set()
+            assert release.wait(timeout=2)
+            return 0
+
+    service = bare_service(RuntimeHealth("OK", "healthy", {}))
+    service.state = "ACTIVATED"
+    service.cli = BlockingCli()
+    service._prepare_cli = lambda: None
+    result = []
+    worker = threading.Thread(target=lambda: result.append(service.cmd("start")))
+    worker.start()
+    assert entered.wait(timeout=2)
+    service._fail_stop("runtime_integrity_abort")
+    release.set()
+    worker.join(timeout=2)
+
+    assert not worker.is_alive()
+    assert result == [0]
+    assert service.state == "FAILED"
+    assert service.monitor.start_calls == []
+    assert service.monitor.abort_calls == ["runtime_integrity_abort"]
+
+
+def test_abort_during_after_start_prevents_later_assets_and_running_state():
+    entered = threading.Event()
+    release = threading.Event()
+    service = bare_service(RuntimeHealth("OK", "healthy", {}))
+    service.state = "ACTIVATED"
+    service.cli = SimpleNamespace(start=lambda: 0)
+    service._prepare_cli = lambda: None
+    service.monitor = BlockingStartMonitor(entered, release)
+    result = []
+
+    worker = threading.Thread(target=lambda: result.append(service.cmd("start")))
+    worker.start()
+    assert entered.wait(timeout=2)
+    service._fail_stop("runtime_integrity_abort")
+    release.set()
+    worker.join(timeout=2)
+
+    assert not worker.is_alive()
+    assert result == [0]
+    assert service.state == "FAILED"
+    assert service.monitor.spawned == ["after_start-first"]
+    assert service.monitor.abort_calls == ["runtime_integrity_abort"]
+
+
+def test_concurrent_fail_stop_runs_cleanup_once_and_keeps_first_evidence():
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockingAbortMonitor(Monitor):
+        def abort(self, reason):
+            self.abort_calls.append(reason)
+            entered.set()
+            assert release.wait(timeout=2)
+
+    service = bare_service(RuntimeHealth("ABORT", "owner died", {}))
+    service.state = "RUNNING"
+    service.monitor = BlockingAbortMonitor()
+    first = threading.Thread(
+        target=lambda: service._fail_stop(
+            "runtime_integrity_abort", evidence={"source": "first"}
+        )
+    )
+    first.start()
+    assert entered.wait(timeout=2)
+
+    second = threading.Thread(
+        target=lambda: service._fail_stop(
+            "unexpected_asset_exit", evidence={"source": "second"}
+        )
+    )
+    second.start()
+    second.join(timeout=2)
+    release.set()
+    first.join(timeout=2)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert service.monitor.abort_calls == ["runtime_integrity_abort"]
+    assert service.failure_report["trigger"] == "runtime_integrity_abort"
+    assert service.failure_report["source"] == "first"
+    assert service.state == "FAILED"
 
 
 def test_fail_stop_records_cleanup_exception_and_survivor():
