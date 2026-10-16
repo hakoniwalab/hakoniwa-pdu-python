@@ -459,7 +459,10 @@ class LauncherControlServer(socketserver.TCPServer):
         self.timeout = poll_interval
         self.persist(force=True)
         try:
-            while not self.stop_requested and self.service.status() != "TERMINATED":
+            while (
+                not self.stop_requested
+                and self.service.status() not in _TERMINAL_STATES
+            ):
                 self.handle_request()
                 self.persist()
         finally:

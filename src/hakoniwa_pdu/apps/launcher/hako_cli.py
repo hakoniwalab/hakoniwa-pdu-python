@@ -129,6 +129,21 @@ class HakoCli:
                 "hako-cmd check returned invalid JSON",
                 {"returncode": proc.returncode, "stderr": proc.stderr},
             )
+        if payload.get("schema_version") != 1:
+            return RuntimeHealth(
+                "UNKNOWN", "hako-cmd check returned an unsupported schema", payload
+            )
+        checks = payload.get("checks")
+        if not isinstance(checks, list) or any(
+            not isinstance(check, dict)
+            or not isinstance(check.get("name"), str)
+            or check.get("status") not in ("OK", "ABORT", "UNKNOWN")
+            or not isinstance(check.get("reason"), str)
+            for check in checks
+        ):
+            return RuntimeHealth(
+                "UNKNOWN", "hako-cmd check returned invalid checks", payload
+            )
         status = payload.get("status")
         if status not in ("OK", "ABORT", "UNKNOWN"):
             return RuntimeHealth(

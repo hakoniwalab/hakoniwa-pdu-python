@@ -401,7 +401,9 @@ or unrecognized hako-cmd versions remain on the legacy command line, so existing
 installations continue to work without the new option.
 
 With hako-cmd 1.1.0 or newer, the Launcher runs `hako-cmd check` before startup
-and periodically while active. `ABORT` changes the Launcher state to `FAILED`
+and periodically while active. The consumer requires the versioned v1 report
+with a `checks[]` array; an unsupported or malformed report is `UNKNOWN`.
+`ABORT` changes the Launcher state to `FAILED`
 and terminates every managed process. `UNKNOWN` is reported as a warning and
 does not trigger destructive action. Every check has an outer subprocess
 timeout, configured by `runtime.health_check_timeout_sec`; the periodic interval
@@ -413,6 +415,15 @@ setting it to `true` now refuses startup. Inspect the evidence with
 `hako-cmd check`, stop all related processes, and run `hako-cmd recover`
 explicitly. Launcher session files and asset logs remain available after a
 fail-stop event.
+
+An unexpected asset exit is also fail-stop: the asset name, PID, exit code or
+signal, cleanup exception, and post-cleanup process diagnostics are stored in
+`failure_report`. Successful cleanup does not replace `FAILED` with
+`TERMINATED`. `failure_report.cleanup.recover_safe` is true only when every
+managed process and descendant scope was verified stopped. In particular,
+Windows uses `taskkill /T /F` for native process trees but cannot independently
+enumerate descendants after a parent has already disappeared; that limitation
+is recorded and recovery remains unsafe until the operator checks it.
 
 #### Notify section
 

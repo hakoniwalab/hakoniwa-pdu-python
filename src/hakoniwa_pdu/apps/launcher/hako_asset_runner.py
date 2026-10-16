@@ -95,6 +95,8 @@ class AssetRunner:
         self.handle: Optional[ProcHandle] = None
         self._win_pid: Optional[int] = None
         self._posix_pgid: Optional[int] = None
+        self._managed_pid: Optional[int] = None
+        self._windows_tree_cleanup = False
 
     # ---------- helpers ----------
     @staticmethod
@@ -180,6 +182,8 @@ class AssetRunner:
                 timeout=15.0
             )
             self._win_pid = int(out.strip())
+            self._managed_pid = self._win_pid
+            self._windows_tree_cleanup = True
             dummy = subprocess.Popen(["/bin/true"]) if IS_POSIX else subprocess.Popen(["cmd.exe", "/c", "exit", "0"])
             self.handle = ProcHandle(
                 popen=dummy,
@@ -211,6 +215,8 @@ class AssetRunner:
             # even after the direct child exits: launch scripts may leave a
             # long-running descendant in the same group.
             self._posix_pgid = popen.pid
+        self._managed_pid = popen.pid
+        self._windows_tree_cleanup = IS_WIN
 
         self.handle = ProcHandle(
             popen=popen,
@@ -327,6 +333,19 @@ class AssetRunner:
         try:
             if IS_POSIX:
                 os.killpg(self._posix_pgid or h.popen.pid, signal.SIGKILL)
+            elif IS_WIN:
+                completed = subprocess.run(
+                    ["taskkill", "/PID", str(h.popen.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5.0,
+                    check=False,
+                )
+                if completed.returncode not in (0, 128):
+                    raise RuntimeError(
+                        f"taskkill /T failed for pid={h.popen.pid}: "
+                        f"rc={completed.returncode}"
+                    )
             else:
                 h.popen.kill()
         finally:
@@ -337,6 +356,33 @@ class AssetRunner:
                 f"process group survived SIGKILL: pid={h.popen.pid} "
                 f"pgid={self._posix_pgid}"
             )
+
+    def diagnostics(self) -> dict:
+        """Return non-mutating lifecycle evidence for failure reports."""
+        info = self.exit_info()
+        if self._windows_tree_cleanup:
+            cleanup_scope = "windows_taskkill_tree"
+            descendants_verified = False
+        elif IS_POSIX:
+            cleanup_scope = "posix_process_group"
+            descendants_verified = not self.is_alive()
+        elif IS_WIN:
+            cleanup_scope = "windows_taskkill_tree"
+            # Windows taskkill /T is requested while the parent exists, but
+            # this runner does not enumerate an already-orphaned descendant.
+            descendants_verified = False
+        else:
+            cleanup_scope = "direct_process"
+            descendants_verified = False
+        return {
+            "pid": self._managed_pid if self._managed_pid is not None else info.pid,
+            "pgid": self._posix_pgid,
+            "alive": self.is_alive(),
+            "exit_code": info.exit_code,
+            "signal": info.signal,
+            "cleanup_scope": cleanup_scope,
+            "descendants_verified_stopped": descendants_verified,
+        }
 
     def exit_info(self) -> ExitInfo:
         h = self.handle
