@@ -42,6 +42,17 @@ def binary_read_recursive_AckermannStepRequest(meta: binary_io.PduMetaData, bina
     binary_read_recursive_AckermannDrive(meta, binary_data, tmp_py_obj, base_off + 8)
     py_obj.drive = tmp_py_obj
     
+    # array_type: single 
+    # data_type: primitive 
+    # member_name: tire_friction 
+    # type_name: float64 
+    # offset: 32 size: 8 
+    # array_len: 1
+
+    
+    bin = binary_io.readBinary(binary_data, base_off + 32, 8)
+    py_obj.tire_friction = binary_io.binTovalue("float64", bin)
+    
     return py_obj
 
 
@@ -98,6 +109,20 @@ def binary_write_recursive_AckermannStepRequest(parent_off: int, bw_container: B
     off = 8
 
     binary_write_recursive_AckermannDrive(parent_off + off, bw_container, allocator, py_obj.drive)
+    
+    # array_type: single 
+    # data_type: primitive 
+    # member_name: tire_friction 
+    # type_name: float64 
+    # offset: 32 size: 8 
+    # array_len: 1
+    type = "float64"
+    off = 32
+
+    
+    bin = binary_io.typeTobin(type, py_obj.tire_friction)
+    bin = get_binary(type, bin, 8)
+    allocator.add(bin, expected_offset=parent_off + off)
     
 
 if __name__ == "__main__":
