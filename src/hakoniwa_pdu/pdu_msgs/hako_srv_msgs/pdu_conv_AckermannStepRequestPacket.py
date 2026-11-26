@@ -36,7 +36,7 @@ def binary_read_recursive_AckermannStepRequestPacket(meta: binary_io.PduMetaData
     # data_type: struct 
     # member_name: body 
     # type_name: AckermannStepRequest 
-    # offset: 272 size: 32 
+    # offset: 272 size: 40 
     # array_len: 1
 
     tmp_py_obj = AckermannStepRequest()
@@ -90,7 +90,7 @@ def binary_write_recursive_AckermannStepRequestPacket(parent_off: int, bw_contai
     # data_type: struct 
     # member_name: body 
     # type_name: AckermannStepRequest 
-    # offset: 272 size: 32 
+    # offset: 272 size: 40 
     # array_len: 1
     type = "AckermannStepRequest"
     off = 272

@@ -13,15 +13,18 @@ class AckermannStepRequest:
 
     step: int
     drive: AckermannDrive
+    tire_friction: float
 
     def __init__(self):
         self.step = 0
         self.drive = AckermannDrive()
+        self.tire_friction = 0.0
 
     def __str__(self):
         return f"AckermannStepRequest(" + ", ".join([
             f"step={self.step}"
             f"drive={self.drive}"
+            f"tire_friction={self.tire_friction}"
         ]) + ")"
 
     def __repr__(self):
@@ -52,6 +55,16 @@ class AckermannStepRequest:
             d['drive'] = [item.to_dict() if hasattr(item, 'to_dict') else item for item in field_val]
         else:
             d['drive'] = field_val
+        # handle field 'tire_friction'
+        field_val = self.tire_friction
+        if isinstance(field_val, bytearray):
+            d['tire_friction'] = list(field_val)
+        elif hasattr(field_val, 'to_dict'):
+            d['tire_friction'] = field_val.to_dict()
+        elif isinstance(field_val, list):
+            d['tire_friction'] = [item.to_dict() if hasattr(item, 'to_dict') else item for item in field_val]
+        else:
+            d['tire_friction'] = field_val
         return d
 
     @classmethod
@@ -94,6 +107,23 @@ class AckermannStepRequest:
                 obj.drive = field_type.from_dict(value)
             else:
                 obj.drive = value
+        # handle field 'tire_friction'
+        if 'tire_friction' in d:
+            field_type = cls.__annotations__.get('tire_friction')
+            value = d['tire_friction']
+            
+            if field_type is bytearray:
+                obj.tire_friction = bytearray(value)
+            elif hasattr(field_type, '__origin__') and field_type.__origin__ is list:
+                list_item_type = field_type.__args__[0]
+                if hasattr(list_item_type, 'from_dict'):
+                    obj.tire_friction = [list_item_type.from_dict(item) for item in value]
+                else:
+                    obj.tire_friction = value
+            elif hasattr(field_type, 'from_dict'):
+                obj.tire_friction = field_type.from_dict(value)
+            else:
+                obj.tire_friction = value
         return obj
 
     def to_json(self, indent=2):
